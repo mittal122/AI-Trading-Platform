@@ -9,34 +9,41 @@ from backend.app.core.ai import kronos
 
 
 class PredictionService:
+    """
+    Orchestrates the complete prediction pipeline.
+
+    Flow:
+    Client Request
+        ↓
+    Fetch Market Data
+        ↓
+    Run Kronos Prediction
+        ↓
+    Build API Response
+    """
 
     def __init__(self):
-        self.market_service = MarketService()
+        self.market = MarketService()
 
-    def predict(self, request: PredictionRequest) -> PredictionResponse:
+        # Load Kronos automatically if it has not been loaded yet.
+        if not kronos.is_loaded():
+            kronos.load()
 
-        market_df = self.market_service.get_market_data(
+    def predict(
+        self,
+        request: PredictionRequest,
+    ) -> PredictionResponse:
+
+        # Fetch historical market data
+        market_df = self.market.get_market_data(
             symbol=request.symbol,
             interval=request.interval,
             limit=request.lookback,
         )
 
-        prediction_df = kronos.predictor.predict(
-            df=market_df[
-                [
-                    "open",
-                    "high",
-                    "low",
-                    "close",
-                    "volume",
-                    "amount",
-                ]
-            ],
-            x_timestamp=market_df["timestamps"],
-            y_timestamp=kronos.create_future_timestamps(
-                market_df["timestamps"],
-                request.prediction_length,
-            ),
+        # Generate AI prediction
+        prediction_df = kronos.predict(
+            df=market_df,
             pred_len=request.prediction_length,
         )
 
@@ -46,7 +53,7 @@ class PredictionService:
 
             candles.append(
                 CandlePrediction(
-                    timestamp=str(timestamp),
+                    timestamp=timestamp.isoformat(),
                     open=float(row["open"]),
                     high=float(row["high"]),
                     low=float(row["low"]),
@@ -59,6 +66,8 @@ class PredictionService:
         return PredictionResponse(
             symbol=request.symbol,
             interval=request.interval,
-            current_price=float(market_df.iloc[-1]["close"]),
+            current_price=float(
+                market_df.iloc[-1]["close"]
+            ),
             predictions=candles,
         )
