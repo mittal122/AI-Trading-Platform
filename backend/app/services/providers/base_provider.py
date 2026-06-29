@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-
 import pandas as pd
 
 
@@ -12,7 +11,16 @@ class BaseMarketProvider(ABC):
         interval: str,
         limit: int,
     ) -> pd.DataFrame:
-        """
-        Return market candles as a pandas DataFrame.
-        """
+        pass
+
+    @abstractmethod
+    def get_symbols(self):
+        pass
+
+    @abstractmethod
+    def get_supported_intervals(self):
+        pass
+
+    @abstractmethod
+    def get_provider_name(self):
         pass

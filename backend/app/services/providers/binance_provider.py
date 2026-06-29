@@ -5,6 +5,7 @@ from backend.app.services.providers.base_provider import (
     BaseMarketProvider,
 )
 
+
 class BinanceProvider(BaseMarketProvider):
 
     INTERVAL_MAP = {
@@ -21,6 +22,33 @@ class BinanceProvider(BaseMarketProvider):
     def __init__(self):
         self.client = Client()
 
+    def get_provider_name(self):
+        return "binance"
+
+    def get_supported_intervals(self):
+        return list(self.INTERVAL_MAP.keys())
+
+    def get_symbols(self):
+
+        exchange = self.client.get_exchange_info()
+
+        symbols = []
+
+        for item in exchange["symbols"]:
+
+            if item["status"] != "TRADING":
+                continue
+
+            symbols.append(
+                {
+                    "symbol": item["symbol"],
+                    "base_asset": item["baseAsset"],
+                    "quote_asset": item["quoteAsset"],
+                }
+            )
+
+        return symbols
+
     def get_market_data(
         self,
         symbol: str,
@@ -29,10 +57,10 @@ class BinanceProvider(BaseMarketProvider):
     ) -> pd.DataFrame:
 
         klines = self.client.get_klines(
-    symbol=symbol.upper(),
-    interval=self.INTERVAL_MAP[interval],
-    limit=limit,
-)
+            symbol=symbol.upper(),
+            interval=self.INTERVAL_MAP[interval],
+            limit=limit,
+        )
 
         df = pd.DataFrame(
             klines,
@@ -86,8 +114,6 @@ class BinanceProvider(BaseMarketProvider):
             "amount",
         ]
 
-        df[numeric_columns] = df[
-            numeric_columns
-        ].astype(float)
+        df[numeric_columns] = df[numeric_columns].astype(float)
 
         return df

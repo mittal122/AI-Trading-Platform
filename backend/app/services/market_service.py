@@ -9,7 +9,6 @@ class MarketService:
         self,
         provider: str = "binance",
     ):
-
         self.provider = ProviderFactory.get_provider(
             provider
         )
@@ -20,9 +19,17 @@ class MarketService:
         interval: str,
         limit: int,
     ):
-
         return self.provider.get_market_data(
             symbol=symbol,
             interval=interval,
             limit=limit,
         )
+
+    def get_symbols(self):
+        return self.provider.get_symbols()
+
+    def get_supported_intervals(self):
+        return self.provider.get_supported_intervals()
+
+    def get_provider_name(self):
+        return self.provider.get_provider_name()

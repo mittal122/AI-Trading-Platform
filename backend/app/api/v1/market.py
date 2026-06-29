@@ -5,8 +5,13 @@ from backend.app.schemas.history import (
     HistoricalMarketResponse,
     HistoricalCandle,
 )
-from backend.app.services.market_service import MarketService
+from backend.app.schemas.exchange import (
+    SymbolsResponse,
+    IntervalsResponse,
+    ProvidersResponse,
+)
 
+from backend.app.services.market_service import MarketService
 
 router = APIRouter(
     prefix="/market",
@@ -54,10 +59,10 @@ def historical_market(
     symbol: str = Query(default="BTCUSDT"),
     interval: str = Query(default="5m"),
     limit: int = Query(
-    default=500,
-    ge=1,
-    le=1000,
-),
+        default=500,
+        ge=1,
+        le=1000,
+    ),
 ):
 
     df = market_service.get_market_data(
@@ -86,4 +91,41 @@ def historical_market(
         symbol=symbol,
         interval=interval,
         candles=candles,
+    )
+
+
+@router.get(
+    "/symbols",
+    response_model=SymbolsResponse,
+)
+def get_symbols():
+
+    return SymbolsResponse(
+        provider=market_service.get_provider_name(),
+        symbols=market_service.get_symbols(),
+    )
+
+
+@router.get(
+    "/intervals",
+    response_model=IntervalsResponse,
+)
+def get_intervals():
+
+    return IntervalsResponse(
+        provider=market_service.get_provider_name(),
+        intervals=market_service.get_supported_intervals(),
+    )
+
+
+@router.get(
+    "/providers",
+    response_model=ProvidersResponse,
+)
+def get_providers():
+
+    return ProvidersResponse(
+        providers=[
+            market_service.get_provider_name(),
+        ]
     )

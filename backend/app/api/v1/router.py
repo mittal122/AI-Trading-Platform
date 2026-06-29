@@ -1,5 +1,8 @@
 from fastapi import APIRouter
 
+from backend.app.api.v1.indicator import (
+    router as indicator_router,
+)
 from backend.app.api.v1.market import (
     router as market_router,
 )
@@ -16,4 +19,8 @@ api_router.include_router(
 
 api_router.include_router(
     market_router
+)
+
+api_router.include_router(
+    indicator_router
 )
