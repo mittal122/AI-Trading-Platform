@@ -6,6 +6,9 @@ from backend.app.api.v1.indicator import (
 from backend.app.api.v1.market import (
     router as market_router,
 )
+from backend.app.api.v1.strategy import (
+    router as strategy_router,
+)
 
 from backend.app.api.v1.prediction import (
     router as prediction_router,
@@ -23,4 +26,7 @@ api_router.include_router(
 
 api_router.include_router(
     indicator_router
+)   
+api_router.include_router(
+    strategy_router
 )
