@@ -1,6 +1,9 @@
 from backend.app.services.position.fixed_position import (
     FixedPosition,
 )
+from backend.app.services.position.kelly_position import (
+    KellyPosition,
+)
 
 
 class PositionFactory:
@@ -12,6 +15,7 @@ class PositionFactory:
 
         engines = {
             "fixed": FixedPosition,
+            "kelly": KellyPosition,
         }
 
         name = name.lower()
