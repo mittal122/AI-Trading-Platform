@@ -53,5 +53,20 @@ class StrategyConfig:
     # Breakout strategy Bollinger Band threshold
     BREAKOUT_BB_BUFFER = 0.001  # 0.1% inside band to confirm breakout
 
+    # Kelly Criterion position sizing
+    KELLY_MAX_FRACTION = 0.25       # cap kelly fraction at 25% of equity
+    KELLY_DEFAULT_WIN_RATE = 0.55   # assumed win rate if no history available
+    KELLY_DEFAULT_RR = 2.0          # assumed RR if not provided
+
+    # Drawdown protection
+    DRAWDOWN_HALT_PCT = 0.10        # halt new trades at 10% drawdown
+    DRAWDOWN_CLOSE_ALL_PCT = 0.20   # close all positions at 20% drawdown
+
+    # Daily loss limit
+    DAILY_LOSS_LIMIT_PCT = 0.02     # halt trading if daily loss > 2% of equity
+
+    # Risk-adjusted position sizing cap
+    MAX_POSITION_EQUITY_PCT = 0.05  # single position max 5% of equity
+
 
 strategy_config = StrategyConfig()
