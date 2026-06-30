@@ -84,6 +84,18 @@ class ExitManager:
                 print(f"Break-even activated | SL moved to {trade.entry_price:.2f}")
 
         # -------------------------
+        # Partial Exit — close 50% at 1:1 RR
+        # -------------------------
+
+        if not trade.partial_exit_done:
+            if is_long and price >= trade.entry_price + risk:
+                trade.partial_exit_done = True
+                return True, "PARTIAL_EXIT"
+            elif not is_long and price <= trade.entry_price - risk:
+                trade.partial_exit_done = True
+                return True, "PARTIAL_EXIT"
+
+        # -------------------------
         # Trailing Stop
         # Activate after break-even; trail 1.5x ATR behind peak
         # -------------------------

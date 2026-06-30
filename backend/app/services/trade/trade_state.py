@@ -21,3 +21,6 @@ class TradeState:
     candles_held: int = 0
     atr_at_entry: float = 0.0
     trailing_stop_active: bool = False
+
+    # Partial exit tracking
+    partial_exit_done: bool = False
