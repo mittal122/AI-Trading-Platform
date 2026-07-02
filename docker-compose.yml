@@ -1,0 +1,69 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-trading}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trading}
+      POSTGRES_DB: ${POSTGRES_DB:-trading}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trading}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-trading}:${POSTGRES_PASSWORD:-trading}@postgres:5432/${POSTGRES_DB:-trading}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost}
+      JWT_SECRET: ${JWT_SECRET}
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY}
+      NVIDIA_NIM_BASE_URL: ${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      MARKET_ANALYST_MODEL: ${MARKET_ANALYST_MODEL:-nvidia/nemotron-3-super-120b-a12b}
+      STRATEGY_SELECTOR_MODEL: ${STRATEGY_SELECTOR_MODEL:-zai-org/glm-5.1}
+      TRADE_VALIDATOR_MODEL: ${TRADE_VALIDATOR_MODEL:-deepseek-ai/deepseek-v4-pro}
+      RISK_MANAGER_MODEL: ${RISK_MANAGER_MODEL:-zai-org/glm-5.1}
+      SENTIMENT_ANALYZER_MODEL: ${SENTIMENT_ANALYZER_MODEL:-minimaxai/minimax-m3}
+      CHAT_ASSISTANT_MODEL: ${CHAT_ASSISTANT_MODEL:-moonshotai/kimi-k2.5}
+      BACKTEST_EXPLAINER_MODEL: ${BACKTEST_EXPLAINER_MODEL:-minimaxai/minimax-m2.7}
+      BINANCE_API_KEY: ${BINANCE_API_KEY:-}
+      BINANCE_SECRET: ${BINANCE_SECRET:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO:-}
+      STRIPE_PRICE_ENTERPRISE: ${STRIPE_PRICE_ENTERPRISE:-}
+      KRONOS_PATH: /kronos
+      DEFAULT_MODEL: ${DEFAULT_MODEL:-NeoQuasar/Kronos-small}
+      DEFAULT_TOKENIZER: ${DEFAULT_TOKENIZER:-NeoQuasar/Kronos-Tokenizer-base}
+      DEFAULT_SYMBOL: ${DEFAULT_SYMBOL:-BTCUSDT}
+      DEFAULT_INTERVAL: ${DEFAULT_INTERVAL:-5m}
+      DEFAULT_LOOKBACK: ${DEFAULT_LOOKBACK:-400}
+      DEFAULT_PRED_LEN: ${DEFAULT_PRED_LEN:-24}
+    volumes:
+      - ${KRONOS_PATH_HOST:-./kronos}:/kronos:ro
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+
+volumes:
+  postgres_data:

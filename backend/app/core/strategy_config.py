@@ -68,5 +68,49 @@ class StrategyConfig:
     # Risk-adjusted position sizing cap
     MAX_POSITION_EQUITY_PCT = 0.05  # single position max 5% of equity
 
+    # CTA Trend (Systematic Trend Following) — 3 EMA-crossover sub-signals
+    CTA_FAST_EMA_1 = 10
+    CTA_SLOW_EMA_1 = 50
+    CTA_FAST_EMA_2 = 20
+    CTA_SLOW_EMA_2 = 100
+    CTA_FAST_EMA_3 = 50
+    CTA_SLOW_EMA_3 = 200
+    # Time-series momentum sub-signals (lookback in candles)
+    CTA_MOM_LOOKBACK_1 = 90
+    CTA_MOM_LOOKBACK_2 = 180
+    # Composite signal must exceed this to take a position (0 = any lean)
+    CTA_ENTRY_THRESHOLD = 0.0
+    # Volatility targeting
+    CTA_VOL_LOOKBACK = 90
+    CTA_TARGET_VOL_PCT = 0.15
+    CTA_MAX_LEVERAGE = 2.0
+    CTA_PERIODS_PER_YEAR = 8760  # annualization factor assuming hourly candles
+    # Stop/target — ATR(20)-scaled
+    CTA_ATR_PERIOD = 20
+    CTA_SL_ATR_MULTIPLIER = 2.5
+    CTA_TP_ATR_MULTIPLIER = 4.0
+
+    # Turtle Trading System — dual breakout system (Richard Dennis-style)
+    TURTLE_N_PERIOD = 20             # ATR window — the Turtle "volatility unit" N
+    TURTLE_SYS1_ENTRY_PERIOD = 20
+    TURTLE_SYS1_EXIT_PERIOD = 10
+    TURTLE_SYS2_ENTRY_PERIOD = 55
+    TURTLE_SYS2_EXIT_PERIOD = 20
+    TURTLE_ACTIVE_SYSTEM = 1          # 1 = filtered 20-bar system, 2 = unfiltered 55-bar system
+    TURTLE_RISK_PERCENT = 1.0         # % of equity risked per unit (informational — sizing is PositionEngine's job)
+    TURTLE_SL_N_MULTIPLIER = 2.0
+    TURTLE_TP_N_MULTIPLIER = 4.0
+    TURTLE_BACKWARD_SCAN_BARS = 150   # how far back System 1's last-breakout filter searches
+
+    # Engulfing Scalp — EMA200 trend filter + RSI + bullish engulfing candle
+    ENGULF_EMA_PERIOD = 200
+    ENGULF_RSI_PERIOD = 14
+    ENGULF_RSI_MIDLINE = 50
+    ENGULF_MIN_BODY_RATIO = 1.0       # engulfing candle body must be >= this x the prior candle's body
+    ENGULF_SL_RANGE_MULTIPLIER = 2.0  # stop = entry candle range x this, below entry
+    ENGULF_RR_RATIO = 2.0
+    ENGULF_DIVERGENCE_LOOKBACK = 20
+    ENGULF_DIVERGENCE_BONUS = 10.0
+
 
 strategy_config = StrategyConfig()

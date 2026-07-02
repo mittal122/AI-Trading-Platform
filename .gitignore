@@ -26,3 +26,13 @@ Thumbs.db
 # Build
 dist/
 build/
+
+# Database
+*.db
+*.db-journal
+
+# Node
+node_modules/
+
+# Playwright MCP session artifacts
+.playwright-mcp/

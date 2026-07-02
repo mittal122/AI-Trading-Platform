@@ -1,3 +1,4 @@
+import numpy as np
 import pandas_ta as pta
 
 from ta.trend import (
@@ -245,3 +246,100 @@ class IndicatorService:
             "trend": trend,
 
         }
+
+    def calculate_cta_trend(
+        self,
+        df,
+        fast_ema_1: int,
+        slow_ema_1: int,
+        fast_ema_2: int,
+        slow_ema_2: int,
+        fast_ema_3: int,
+        slow_ema_3: int,
+        mom_lookback_1: int,
+        mom_lookback_2: int,
+        vol_lookback: int,
+        periods_per_year: int,
+        atr_period: int,
+    ) -> dict:
+        """
+        CTA Trend composite — 3 EMA-crossover sub-signals + 2 time-series
+        momentum sub-signals + realized-volatility-based exposure sizing.
+        Used exclusively by CTATrendStrategy; kept here (not in the strategy
+        file) per the "IndicatorService calculates indicators" layer rule.
+        """
+
+        close = df["close"]
+        high = df["high"]
+        low = df["low"]
+
+        def last_ema(period: int) -> float:
+            return float(EMAIndicator(close=close, window=period).ema_indicator().iloc[-1])
+
+        f1, s1 = last_ema(fast_ema_1), last_ema(slow_ema_1)
+        f2, s2 = last_ema(fast_ema_2), last_ema(slow_ema_2)
+        f3, s3 = last_ema(fast_ema_3), last_ema(slow_ema_3)
+
+        ma_signal_1 = 1 if f1 > s1 else -1 if f1 < s1 else 0
+        ma_signal_2 = 1 if f2 > s2 else -1 if f2 < s2 else 0
+        ma_signal_3 = 1 if f3 > s3 else -1 if f3 < s3 else 0
+
+        # Time-series momentum: sign of the return over each lookback window
+        price_now = float(close.iloc[-1])
+
+        def momentum_signal(lookback: int) -> int:
+            if len(close) <= lookback:
+                return 0
+            lagged = float(close.iloc[-1 - lookback])
+            ret = (price_now / lagged - 1) if lagged > 0 else 0.0
+            return 1 if ret > 0 else -1 if ret < 0 else 0
+
+        mom_signal_1 = momentum_signal(mom_lookback_1)
+        mom_signal_2 = momentum_signal(mom_lookback_2)
+
+        composite = (ma_signal_1 + ma_signal_2 + ma_signal_3 + mom_signal_1 + mom_signal_2) / 5
+
+        # Realized volatility (annualized) over the vol lookback window
+        recent_closes = close.tail(vol_lookback + 1)
+        log_returns = np.log(recent_closes / recent_closes.shift(1)).dropna()
+        annualized_vol = (
+            float(log_returns.std() * np.sqrt(periods_per_year))
+            if len(log_returns) > 1
+            else 0.0
+        )
+
+        atr_series = AverageTrueRange(high=high, low=low, close=close, window=atr_period)
+        atr_val = float(atr_series.average_true_range().iloc[-1])
+
+        return {
+            "ma_signal_1": ma_signal_1,
+            "ma_signal_2": ma_signal_2,
+            "ma_signal_3": ma_signal_3,
+            "mom_signal_1": mom_signal_1,
+            "mom_signal_2": mom_signal_2,
+            "composite": composite,
+            "annualized_vol": annualized_vol,
+            "atr": atr_val,
+            "price": price_now,
+        }
+
+    def calculate_atr_at_period(self, df, period: int) -> float:
+        """ATR at a caller-specified window (atr14 in calculate_from_dataframe
+        is fixed at 14 — Turtle Trading needs a configurable N-period ATR)."""
+        atr_series = AverageTrueRange(
+            high=df["high"], low=df["low"], close=df["close"], window=period
+        ).average_true_range()
+        return float(atr_series.iloc[-1])
+
+    def rolling_channel(self, df, period: int, exclude_current: bool = True) -> tuple[float, float]:
+        """Highest high / lowest low over the last `period` candles.
+        exclude_current=True looks only at CLOSED candles (drops the last row)
+        to avoid look-ahead bias on the in-progress bar."""
+        window = df.iloc[:-1] if exclude_current else df
+        window = window.tail(period)
+        return float(window["high"].max()), float(window["low"].min())
+
+    def calculate_rsi_series(self, df, period: int):
+        """Full RSI series (calculate_from_dataframe only returns the latest
+        scalar) — needed for divergence detection over a lookback window."""
+        return RSIIndicator(close=df["close"], window=period).rsi()
