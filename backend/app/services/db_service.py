@@ -99,6 +99,8 @@ class DatabaseService:
         expectancy: float = 0.0,
         sortino_ratio: float = 0.0,
         calmar_ratio: float = 0.0,
+        avg_candles_to_win: float | None = None,
+        avg_time_to_win_display: str | None = None,
     ) -> BacktestRun:
         record = BacktestRun(
             strategy=strategy,
@@ -120,6 +122,10 @@ class DatabaseService:
             expectancy=round(expectancy, 4),
             sortino_ratio=round(sortino_ratio, 4),
             calmar_ratio=round(calmar_ratio, 4),
+            avg_candles_to_win=(
+                round(avg_candles_to_win, 2) if avg_candles_to_win is not None else None
+            ),
+            avg_time_to_win_display=avg_time_to_win_display,
         )
         async with self._session() as session:
             repo = BacktestRepository(session)

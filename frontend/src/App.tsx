@@ -6,6 +6,8 @@ import Backtest   from './pages/Backtest'
 import Portfolio  from './pages/Portfolio'
 import PaperTrade from './pages/PaperTrade'
 import AIChat     from './pages/AIChat'
+import PatternAnalysis  from './pages/PatternAnalysis'
+import PatternDashboard from './pages/PatternDashboard'
 import Settings   from './pages/Settings'
 
 export default function App() {
@@ -21,6 +23,8 @@ export default function App() {
             <Route path="/portfolio" element={<Portfolio />} />
             <Route path="/paper"     element={<PaperTrade />} />
             <Route path="/chat"      element={<AIChat />} />
+            <Route path="/patterns"           element={<PatternAnalysis />} />
+            <Route path="/patterns/dashboard" element={<PatternDashboard />} />
             <Route path="/settings"  element={<Settings />} />
           </Routes>
         </main>

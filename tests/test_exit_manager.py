@@ -35,10 +35,10 @@ for price, direction, label in test_cases:
         peak_price=60000.0,
         atr_at_entry=300.0,
     )
-    should_exit, reason = exit_manager.check_exit(
+    should_exit, reason, exit_price = exit_manager.check_exit(
         price=price,
         signal_direction=direction,
         trade=t,
         atr=300.0,
     )
-    print(f"{label:<35} price={price}  exit={should_exit}  reason={reason}")
+    print(f"{label:<35} price={price}  exit={should_exit}  reason={reason}  fill={exit_price}")

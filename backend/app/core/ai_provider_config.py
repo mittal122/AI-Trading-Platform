@@ -68,3 +68,22 @@ RISK_MANAGER = ServiceModelConfig(NIM, model=os.getenv("RISK_MANAGER_MODEL", "za
 SENTIMENT_ANALYZER = ServiceModelConfig(NIM, model=os.getenv("SENTIMENT_ANALYZER_MODEL", "minimaxai/minimax-m3"))
 CHAT_ASSISTANT = ServiceModelConfig(NIM, model=os.getenv("CHAT_ASSISTANT_MODEL", "moonshotai/kimi-k2.5"))
 BACKTEST_EXPLAINER = ServiceModelConfig(NIM, model=os.getenv("BACKTEST_EXPLAINER_MODEL", "minimaxai/minimax-m2.7"))
+
+# Pattern Explainer is called once per DETECTED PATTERN — potentially many
+# times per scan, since explanations are auto-generated for every pattern
+# found rather than on-demand. Same "fast, credit-efficient" rationale as
+# Market Analyst, thinking off.
+PATTERN_EXPLAINER = ServiceModelConfig(
+    NIM,
+    model=os.getenv("PATTERN_EXPLAINER_MODEL", "nvidia/nemotron-3-super-120b-a12b"),
+    extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+)
+
+# Analysis Explainer is on-demand only (one call per user click, synthesizing
+# confluence across whichever tools are enabled at once) — unlike Pattern
+# Explainer this isn't called automatically per result, so call volume is low.
+ANALYSIS_EXPLAINER = ServiceModelConfig(
+    NIM,
+    model=os.getenv("ANALYSIS_EXPLAINER_MODEL", "nvidia/nemotron-3-super-120b-a12b"),
+    extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+)

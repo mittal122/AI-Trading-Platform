@@ -70,6 +70,10 @@ class BacktestRun(Base):
     expectancy: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     sortino_ratio: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     calmar_ratio: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    # Avg candles winning trades took to hit target, at this interval — lets
+    # users compare which timeframe a strategy resolves fastest/most reliably on
+    avg_candles_to_win: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    avg_time_to_win_display: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_now
     )

@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel
 
 
@@ -12,6 +14,15 @@ class TradeResult(BaseModel):
     pnl: float
 
     return_percent: float
+
+    # Duration tracking — how long the trade actually took to resolve
+    entry_timestamp: str = ""
+
+    exit_timestamp: str = ""
+
+    candles_held: int = 0
+
+    exit_reason: str = ""
 
 
 class EquityPoint(BaseModel):
@@ -42,3 +53,9 @@ class BacktestResult(BaseModel):
     trades: list[TradeResult]
 
     equity_curve: list[EquityPoint]
+
+    # How long winning trades took to reach target — the empirical answer to
+    # "does this strategy suit this timeframe" (candles_held x interval length)
+    avg_candles_to_win: Optional[float] = None
+
+    avg_time_to_win_display: Optional[str] = None

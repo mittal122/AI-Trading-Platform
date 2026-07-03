@@ -18,6 +18,7 @@ export default function TradeTable({ trades }: { trades: TradeHistoryItem[] }) {
             <th className="pb-2 pr-4">PnL</th>
             <th className="pb-2 pr-4">PnL %</th>
             <th className="pb-2 pr-4">Reason</th>
+            <th className="pb-2 pr-4">Duration</th>
             <th className="pb-2">Date</th>
           </tr>
         </thead>
@@ -42,6 +43,7 @@ export default function TradeTable({ trades }: { trades: TradeHistoryItem[] }) {
                 {t.pnl_percent >= 0 ? '+' : ''}{t.pnl_percent.toFixed(2)}%
               </td>
               <td className="py-2 pr-4 text-slate-500 text-xs">{t.exit_reason}</td>
+              <td className="py-2 pr-4 text-slate-500 text-xs">{t.duration_display || '—'}</td>
               <td className="py-2 text-slate-600 text-xs">{t.created_at.slice(0, 10)}</td>
             </tr>
           ))}

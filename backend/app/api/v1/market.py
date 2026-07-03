@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import APIRouter, Query
 
 from backend.app.schemas.market import LiveMarketResponse
@@ -63,12 +65,17 @@ def historical_market(
         ge=1,
         le=1000,
     ),
+    end_time: Optional[int] = Query(
+        default=None,
+        description="Unix ms — return `limit` candles ending at/before this timestamp instead of the most recent ones (for loading older history).",
+    ),
 ):
 
     df = market_service.get_market_data(
         symbol=symbol,
         interval=interval,
         limit=limit,
+        end_time=end_time,
     )
 
     candles = []

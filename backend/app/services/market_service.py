@@ -1,3 +1,5 @@
+from typing import Optional
+
 from backend.app.services.providers.provider_factory import (
     ProviderFactory,
 )
@@ -18,11 +20,13 @@ class MarketService:
         symbol: str,
         interval: str,
         limit: int,
+        end_time: Optional[int] = None,
     ):
         return self.provider.get_market_data(
             symbol=symbol,
             interval=interval,
             limit=limit,
+            end_time=end_time,
         )
 
     def get_symbols(self):

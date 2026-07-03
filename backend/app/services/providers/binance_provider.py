@@ -1,3 +1,5 @@
+from typing import Optional
+
 import pandas as pd
 from binance.client import Client
 
@@ -17,6 +19,7 @@ class BinanceProvider(BaseMarketProvider):
         "1h": Client.KLINE_INTERVAL_1HOUR,
         "4h": Client.KLINE_INTERVAL_4HOUR,
         "1d": Client.KLINE_INTERVAL_1DAY,
+        "1w": Client.KLINE_INTERVAL_1WEEK,
     }
 
     def __init__(self):
@@ -54,12 +57,18 @@ class BinanceProvider(BaseMarketProvider):
         symbol: str,
         interval: str,
         limit: int,
+        end_time: Optional[int] = None,
     ) -> pd.DataFrame:
+
+        kwargs = {}
+        if end_time is not None:
+            kwargs["endTime"] = end_time
 
         klines = self.client.get_klines(
             symbol=symbol.upper(),
             interval=self.INTERVAL_MAP[interval],
             limit=limit,
+            **kwargs,
         )
 
         df = pd.DataFrame(

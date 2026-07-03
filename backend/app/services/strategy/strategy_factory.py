@@ -10,6 +10,17 @@ from backend.app.services.strategy.engulfing_scalp_strategy import EngulfingScal
 
 class StrategyFactory:
 
+    STRATEGIES = {
+        "rsi":        RSIStrategy,
+        "ema":        EMAStrategy,
+        "macd":       MACDStrategy,
+        "breakout":   BreakoutStrategy,
+        "supertrend": SupertrendStrategy,
+        "cta_trend":  CTATrendStrategy,
+        "turtle":     TurtleStrategy,
+        "engulfing_scalp": EngulfingScalpStrategy,
+    }
+
     @staticmethod
     def get_strategy(
         strategy: str = "rsi",
@@ -17,21 +28,14 @@ class StrategyFactory:
 
         strategy = strategy.lower()
 
-        strategies = {
-            "rsi":        RSIStrategy,
-            "ema":        EMAStrategy,
-            "macd":       MACDStrategy,
-            "breakout":   BreakoutStrategy,
-            "supertrend": SupertrendStrategy,
-            "cta_trend":  CTATrendStrategy,
-            "turtle":     TurtleStrategy,
-            "engulfing_scalp": EngulfingScalpStrategy,
-        }
-
-        if strategy not in strategies:
+        if strategy not in StrategyFactory.STRATEGIES:
             raise ValueError(
                 f"Unknown strategy: {strategy}. "
-                f"Available: {list(strategies.keys())}"
+                f"Available: {list(StrategyFactory.STRATEGIES.keys())}"
             )
 
-        return strategies[strategy]()
+        return StrategyFactory.STRATEGIES[strategy]()
+
+    @staticmethod
+    def list_strategies() -> list[str]:
+        return list(StrategyFactory.STRATEGIES.keys())

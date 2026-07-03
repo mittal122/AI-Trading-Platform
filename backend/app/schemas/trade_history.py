@@ -18,6 +18,7 @@ class TradeHistoryItem(BaseModel):
     entry_timestamp: str
     exit_timestamp: str
     created_at: str
+    duration_display: str = ""
 
     model_config = {"from_attributes": True}
 
@@ -50,6 +51,8 @@ class BacktestRunItem(BaseModel):
     expectancy: float = 0.0
     sortino_ratio: float = 0.0
     calmar_ratio: float = 0.0
+    avg_candles_to_win: Optional[float] = None
+    avg_time_to_win_display: Optional[str] = None
     created_at: str
 
     model_config = {"from_attributes": True}

@@ -1,23 +1,47 @@
-import { useState } from 'react'
-import { getSignal } from '../api/client'
+import { useEffect, useState } from 'react'
+import { getSignal, scanAllStrategies, getMultiTimeframeSignals } from '../api/client'
 import type { TradingSignal } from '../api/client'
 import SignalCard from '../components/SignalCard'
+import SignalScanTable from '../components/SignalScanTable'
+import { usePersistedState } from '../hooks/usePersistedState'
 
 const STRATEGIES = ['rsi', 'ema', 'macd', 'breakout', 'supertrend', 'cta_trend', 'turtle', 'engulfing_scalp']
 const INTERVALS  = ['1m', '3m', '5m', '15m', '30m', '1h', '4h', '1d']
+const SCAN_TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d']
+
+// TradingSignal.strategy is a human-readable label (e.g. "RSI Strategy") —
+// map it back to the factory key used everywhere else (getSignal, dropdowns).
+const STRATEGY_LABEL_TO_KEY: Record<string, string> = {
+  'RSI Strategy': 'rsi',
+  'EMA Crossover': 'ema',
+  'MACD Crossover': 'macd',
+  'Bollinger Breakout': 'breakout',
+  'Supertrend': 'supertrend',
+  'CTA Trend': 'cta_trend',
+  'Turtle Trading': 'turtle',
+  'Engulfing Scalp': 'engulfing_scalp',
+}
 
 export default function Signals() {
-  const [strategy, setStrategy] = useState('rsi')
-  const [symbol, setSymbol]     = useState('BTCUSDT')
-  const [interval, setInterval] = useState('5m')
+  const [symbolInput, setSymbolInput] = usePersistedState('signals.symbol', 'BTCUSDT')
+  const [symbol, setSymbol]     = useState(symbolInput)
+  const [strategy, setStrategy] = usePersistedState('signals.strategy', 'rsi')
+  const [interval, setInterval] = usePersistedState('signals.interval', '5m')
+
   const [signal, setSignal]     = useState<TradingSignal | null>(null)
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState('')
 
-  async function run() {
+  const [scanResults, setScanResults] = useState<TradingSignal[]>([])
+  const [scanLoading, setScanLoading] = useState(false)
+
+  const [tfResults, setTfResults] = useState<TradingSignal[]>([])
+  const [tfLoading, setTfLoading] = useState(false)
+
+  async function runDetail() {
     setLoading(true); setError('')
     try {
-      const res = await getSignal(strategy, symbol.toUpperCase(), interval)
+      const res = await getSignal(strategy, symbol, interval)
       setSignal(res.data)
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Failed to get signal')
@@ -26,51 +50,105 @@ export default function Signals() {
     }
   }
 
+  async function runScan() {
+    setScanLoading(true)
+    try {
+      const res = await scanAllStrategies(symbol, interval)
+      setScanResults(res.data)
+    } catch {
+      setScanResults([])
+    } finally {
+      setScanLoading(false)
+    }
+  }
+
+  async function runTimeframes() {
+    setTfLoading(true)
+    try {
+      const res = await getMultiTimeframeSignals(strategy, symbol, SCAN_TIMEFRAMES)
+      setTfResults(res.data)
+    } catch {
+      setTfResults([])
+    } finally {
+      setTfLoading(false)
+    }
+  }
+
+  // Every strategy analyzes the market on its own — auto-runs whenever the
+  // symbol or the scan timeframe changes, no manual "open each strategy" step.
+  useEffect(() => { runScan() }, [symbol, interval])
+  // Same strategy, every timeframe independently — auto-runs on strategy/symbol change.
+  useEffect(() => { runTimeframes() }, [strategy, symbol])
+  useEffect(() => { runDetail() }, [strategy, symbol, interval])
+
+  function submitSymbol() {
+    const next = symbolInput.trim().toUpperCase()
+    if (next) { setSymbolInput(next); setSymbol(next) }
+  }
+
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-xl font-bold text-white">Signals</h1>
-
-      {/* Controls */}
-      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">Symbol</label>
-            <input
-              value={symbol}
-              onChange={e => setSymbol(e.target.value)}
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
-            />
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">Strategy</label>
-            <select
-              value={strategy}
-              onChange={e => setStrategy(e.target.value)}
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none"
-            >
-              {STRATEGIES.map(s => <option key={s}>{s}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">Interval</label>
-            <select
-              value={interval}
-              onChange={e => setInterval(e.target.value)}
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none"
-            >
-              {INTERVALS.map(i => <option key={i}>{i}</option>)}
-            </select>
-          </div>
-          <div className="flex items-end">
-            <button
-              onClick={run}
-              disabled={loading}
-              className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
-            >
-              {loading ? 'Analyzing…' : 'Analyze'}
-            </button>
-          </div>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h1 className="text-xl font-bold text-white">Signals</h1>
+        <div className="flex items-center gap-2">
+          <input
+            value={symbolInput}
+            onChange={e => setSymbolInput(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && submitSymbol()}
+            onBlur={submitSymbol}
+            className="bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 w-32"
+          />
+          <button onClick={submitSymbol}
+            className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg">
+            Go
+          </button>
         </div>
+      </div>
+
+      {/* Market Scan — every strategy, one timeframe */}
+      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5">
+        <div className="flex items-center justify-between mb-1 flex-wrap gap-3">
+          <h2 className="text-sm font-semibold text-slate-300">
+            Market Scan — every strategy on {symbol} · {interval}
+          </h2>
+          <select value={interval} onChange={e => setInterval(e.target.value)}
+            className="bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-2 py-1 text-xs text-white outline-none">
+            {INTERVALS.map(i => <option key={i}>{i}</option>)}
+          </select>
+        </div>
+        <p className="text-xs text-slate-600 mb-4">All 8 strategies analyze independently — click a row to open its full detail below.</p>
+        {scanLoading ? (
+          <p className="text-slate-500 text-sm text-center py-6">Scanning…</p>
+        ) : (
+          <SignalScanTable
+            signals={scanResults}
+            labelKey="strategy"
+            onRowClick={s => setStrategy(STRATEGY_LABEL_TO_KEY[s.strategy] ?? strategy)}
+          />
+        )}
+      </div>
+
+      {/* Multi-timeframe — one strategy, every timeframe */}
+      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5">
+        <div className="flex items-center justify-between mb-1 flex-wrap gap-3">
+          <h2 className="text-sm font-semibold text-slate-300">
+            Multi-Timeframe — {strategy} on {symbol}
+          </h2>
+          <select value={strategy} onChange={e => setStrategy(e.target.value)}
+            className="bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-2 py-1 text-xs text-white outline-none">
+            {STRATEGIES.map(s => <option key={s}>{s}</option>)}
+          </select>
+        </div>
+        <p className="text-xs text-slate-600 mb-4">Same strategy, every timeframe analyzed independently — compare which one it currently suits.</p>
+        {tfLoading ? (
+          <p className="text-slate-500 text-sm text-center py-6">Scanning timeframes…</p>
+        ) : (
+          <SignalScanTable
+            signals={tfResults}
+            labelKey="interval"
+            onRowClick={s => setInterval(s.interval)}
+          />
+        )}
       </div>
 
       {error && (
@@ -79,7 +157,10 @@ export default function Signals() {
         </div>
       )}
 
-      {signal && <SignalCard signal={signal} />}
+      {/* Detail — the exact strategy/interval selected above */}
+      {loading ? (
+        <p className="text-slate-500 text-sm text-center py-6">Loading detail…</p>
+      ) : signal && <SignalCard signal={signal} />}
     </div>
   )
 }

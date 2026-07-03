@@ -112,5 +112,20 @@ class StrategyConfig:
     ENGULF_DIVERGENCE_LOOKBACK = 20
     ENGULF_DIVERGENCE_BONUS = 10.0
 
+    # Time-to-target estimate — fraction of one candle's ATR that becomes net
+    # favorable (in-direction) movement on an average candle. ATR is the full
+    # two-sided range, so this is <1: most of a candle's range is noise, not
+    # progress toward the target.
+    ETA_ATR_PROGRESS_FACTOR = 0.55
+    # Regime-strength multiplier applied on top — a confirmed strong trend
+    # covers ground faster than a choppy/sideways one.
+    ETA_REGIME_STRONG_MULTIPLIER = 1.3
+    ETA_REGIME_WEAK_MULTIPLIER = 1.0
+    ETA_REGIME_SIDEWAYS_MULTIPLIER = 0.6
+
+    # Multi-strategy scan / multi-timeframe scan defaults
+    SCAN_DEFAULT_INTERVALS = ["1m", "5m", "15m", "1h", "4h", "1d"]
+    SCAN_MAX_WORKERS = 8
+
 
 strategy_config = StrategyConfig()

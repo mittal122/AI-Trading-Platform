@@ -1,6 +1,8 @@
+from backend.app.services.ai.analysis_explainer import AnalysisExplainer
 from backend.app.services.ai.backtest_explainer import BacktestExplainer
 from backend.app.services.ai.chat_assistant import ChatAssistant
 from backend.app.services.ai.market_analyst import MarketAnalyst
+from backend.app.services.ai.pattern_explainer import PatternExplainer
 from backend.app.services.ai.risk_manager import AIRiskManager
 from backend.app.services.ai.sentiment_analyzer import SentimentAnalyzer
 from backend.app.services.ai.strategy_selector import StrategySelector
@@ -36,3 +38,11 @@ class AIFactory:
     @staticmethod
     def get_backtest_explainer() -> BacktestExplainer:
         return BacktestExplainer()
+
+    @staticmethod
+    def get_pattern_explainer() -> PatternExplainer:
+        return PatternExplainer()
+
+    @staticmethod
+    def get_analysis_explainer() -> AnalysisExplainer:
+        return AnalysisExplainer()

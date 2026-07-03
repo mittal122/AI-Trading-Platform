@@ -1,14 +1,27 @@
 import { useEffect, useRef, useState } from 'react'
 import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts'
-import type { UTCTimestamp } from 'lightweight-charts'
+import type { ISeriesApi, LogicalRange, UTCTimestamp } from 'lightweight-charts'
 import { getMarket, getIndicators, getSignal } from '../api/client'
-import type { TradingSignal, Indicators } from '../api/client'
+import type { Candle, TradingSignal, Indicators } from '../api/client'
 import SignalCard from '../components/SignalCard'
 import IndicatorPanel from '../components/IndicatorPanel'
 import RegimeBadge from '../components/RegimeBadge'
 
 const SYMBOL = 'BTCUSDT'
 const INTERVAL = '5m'
+const INITIAL_CANDLES = 500
+const PAGE_CANDLES = 500
+// Start fetching more history once the visible chart is within this many
+// bars of the oldest candle currently loaded ("scrolled near the left edge").
+const LOAD_MORE_THRESHOLD_BARS = 20
+
+function toBarTime(timestamp: string): UTCTimestamp {
+  return Math.floor(new Date(timestamp).getTime() / 1000) as UTCTimestamp
+}
+
+function toBar(c: Candle) {
+  return { time: toBarTime(c.timestamp), open: c.open, high: c.high, low: c.low, close: c.close }
+}
 
 export default function Dashboard() {
   const chartRef = useRef<HTMLDivElement>(null)
@@ -17,6 +30,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [refreshing, setRefreshing] = useState(false)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [historyExhausted, setHistoryExhausted] = useState(false)
 
   async function load() {
     try {
@@ -48,25 +63,88 @@ export default function Dashboard() {
       height: 320,
     })
 
-    const candleSeries = chart.addSeries(CandlestickSeries, {
+    const candleSeries: ISeriesApi<'Candlestick'> = chart.addSeries(CandlestickSeries, {
       upColor: '#22c55e', downColor: '#ef4444',
       borderUpColor: '#22c55e', borderDownColor: '#ef4444',
       wickUpColor: '#22c55e', wickDownColor: '#ef4444',
     })
 
-    getMarket(SYMBOL, INTERVAL, 150).then((res) => {
+    // Ascending by time, deduped — the full history loaded so far.
+    let allCandles: Candle[] = []
+    let hasMore = true
+    let loadingMore = false
+
+    async function loadOlder() {
+      if (loadingMore || !hasMore || allCandles.length === 0) return
+      loadingMore = true
+      setLoadingOlder(true)
+      try {
+        const oldest = allCandles[0]
+        const endTime = new Date(oldest.timestamp).getTime() - 1
+        const res = await getMarket(SYMBOL, INTERVAL, PAGE_CANDLES, endTime)
+        const older = res.data.candles
+
+        if (!Array.isArray(older) || older.length === 0) {
+          hasMore = false
+          setHistoryExhausted(true)
+          return
+        }
+
+        const existingTimes = new Set(allCandles.map((c) => c.timestamp))
+        const newOnes = older.filter((c) => !existingTimes.has(c.timestamp))
+        if (newOnes.length === 0) {
+          hasMore = false
+          setHistoryExhausted(true)
+          return
+        }
+
+        const addedCount = newOnes.length
+        allCandles = [...newOnes, ...allCandles]
+
+        const prevRange = chart.timeScale().getVisibleLogicalRange()
+        candleSeries.setData(allCandles.map(toBar))
+        if (prevRange) {
+          chart.timeScale().setVisibleLogicalRange({
+            from: prevRange.from + addedCount,
+            to: prevRange.to + addedCount,
+          })
+        }
+
+        if (older.length < PAGE_CANDLES) hasMore = false
+      } catch {
+        // leave hasMore as-is — next scroll near the edge retries
+      } finally {
+        loadingMore = false
+        setLoadingOlder(false)
+      }
+    }
+
+    function onVisibleRangeChange(range: LogicalRange | null) {
+      if (range && range.from <= LOAD_MORE_THRESHOLD_BARS) {
+        loadOlder()
+      }
+    }
+
+    getMarket(SYMBOL, INTERVAL, INITIAL_CANDLES).then((res) => {
       const candles = res.data.candles
-      if (Array.isArray(candles)) {
-        candleSeries.setData(candles.map((c) => ({
-          time: Math.floor(new Date(c.timestamp).getTime() / 1000) as UTCTimestamp,
-          open: c.open, high: c.high, low: c.low, close: c.close,
-        })))
+      if (Array.isArray(candles) && candles.length > 0) {
+        allCandles = candles
+        candleSeries.setData(allCandles.map(toBar))
+        if (candles.length < INITIAL_CANDLES) hasMore = false
+      } else {
+        hasMore = false
       }
     }).catch(() => {})
 
+    chart.timeScale().subscribeVisibleLogicalRangeChange(onVisibleRangeChange)
+
     const resize = () => chart.applyOptions({ width: chartRef.current!.clientWidth })
     window.addEventListener('resize', resize)
-    return () => { window.removeEventListener('resize', resize); chart.remove() }
+    return () => {
+      window.removeEventListener('resize', resize)
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(onVisibleRangeChange)
+      chart.remove()
+    }
   }, [])
 
   useEffect(() => { load() }, [])
@@ -98,7 +176,11 @@ export default function Dashboard() {
 
       {/* Chart */}
       <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-4">
-        <p className="text-xs text-slate-500 mb-3">{SYMBOL} Price (TradingView Lightweight Charts)</p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs text-slate-500">{SYMBOL} Price (TradingView Lightweight Charts)</p>
+          {loadingOlder && <p className="text-xs text-indigo-400">Loading older candles…</p>}
+          {!loadingOlder && historyExhausted && <p className="text-xs text-slate-600">Full history loaded</p>}
+        </div>
         <div ref={chartRef} />
       </div>
 

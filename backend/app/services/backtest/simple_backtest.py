@@ -23,6 +23,8 @@ from backend.app.services.trading.simple_trading_engine import (
     SimpleTradingEngine,
 )
 
+from backend.app.core.time_utils import candles_to_display
+
 
 class SimpleBacktest(BaseBacktest):
 
@@ -78,9 +80,9 @@ class SimpleBacktest(BaseBacktest):
 
         if portfolio.position_quantity > 0:
 
-            last_price = float(
-                market.iloc[-1]["close"]
-            )
+            last_candle = market.iloc[-1]
+            last_price = float(last_candle["close"])
+            candles_held = engine.open_trade.candles_held if engine.open_trade else 0
 
             execution = engine.execution.execute(
                 side=OrderSide.SELL,
@@ -92,6 +94,9 @@ class SimpleBacktest(BaseBacktest):
 
             engine.trade_recorder.close_trade(
                 exit_price=execution.executed_price,
+                exit_timestamp=last_candle["timestamps"].isoformat(),
+                candles_held=candles_held,
+                exit_reason="END_OF_DATA",
             )
 
             engine.portfolio.update_market_price(
@@ -126,6 +131,18 @@ class SimpleBacktest(BaseBacktest):
             else 0.0
         )
 
+        winning_durations = [
+            trade.candles_held for trade in trades if trade.pnl > 0 and trade.candles_held > 0
+        ]
+        avg_candles_to_win = (
+            sum(winning_durations) / len(winning_durations) if winning_durations else None
+        )
+        avg_time_to_win_display = (
+            candles_to_display(avg_candles_to_win, interval)
+            if avg_candles_to_win is not None
+            else None
+        )
+
         return BacktestResult(
             initial_balance=final_state.initial_balance,
             ending_balance=final_state.equity,
@@ -136,4 +153,6 @@ class SimpleBacktest(BaseBacktest):
             win_rate=win_rate,
             trades=trades,
             equity_curve=equity_curve,
+            avg_candles_to_win=avg_candles_to_win,
+            avg_time_to_win_display=avg_time_to_win_display,
         )

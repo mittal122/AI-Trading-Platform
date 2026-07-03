@@ -11,6 +11,7 @@ from backend.app.schemas.trade_history import (
 from backend.app.services.db_service import DatabaseService
 from backend.app.services.backtest.backtest_factory import BacktestFactory
 from backend.app.services.portfolio.analytics import PortfolioAnalytics
+from backend.app.core.time_utils import trade_duration_display
 
 router = APIRouter(prefix="/trades", tags=["trades"])
 
@@ -52,6 +53,7 @@ async def get_trade_history(
                 entry_timestamp=t.entry_timestamp,
                 exit_timestamp=t.exit_timestamp,
                 created_at=t.created_at.isoformat(),
+                duration_display=trade_duration_display(t.entry_timestamp, t.exit_timestamp),
             )
             for t in trades
         ],
@@ -113,6 +115,8 @@ def _to_backtest_item(r) -> BacktestRunItem:
         expectancy=r.expectancy,
         sortino_ratio=r.sortino_ratio,
         calmar_ratio=r.calmar_ratio,
+        avg_candles_to_win=r.avg_candles_to_win,
+        avg_time_to_win_display=r.avg_time_to_win_display,
         created_at=r.created_at.isoformat(),
     )
 
@@ -187,6 +191,8 @@ async def run_and_record_backtest(
         expectancy=report.expectancy,
         sortino_ratio=report.sortino_ratio,
         calmar_ratio=report.calmar_ratio,
+        avg_candles_to_win=result.avg_candles_to_win,
+        avg_time_to_win_display=result.avg_time_to_win_display,
     )
 
     return _to_backtest_item(run)

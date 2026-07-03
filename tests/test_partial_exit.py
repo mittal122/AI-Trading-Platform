@@ -22,7 +22,7 @@ def test_partial_exit_triggers_at_1_to_1():
     em = ExitManager()
     trade = make_trade(entry=100.0, sl=95.0, tp=110.0)
     # 1:1 RR is at entry + risk = 100 + 5 = 105
-    should_exit, reason = em.check_exit(
+    should_exit, reason, _ = em.check_exit(
         price=105.0,
         signal_direction="BUY",
         trade=trade,
@@ -40,7 +40,7 @@ def test_partial_exit_fires_only_once():
     # First call at 1:1 → PARTIAL_EXIT
     em.check_exit(price=105.0, signal_direction="BUY", trade=trade, atr=5.0)
     # Second call — partial already done, should NOT fire again
-    should_exit, reason = em.check_exit(
+    should_exit, reason, _ = em.check_exit(
         price=107.0,
         signal_direction="BUY",
         trade=trade,
@@ -54,7 +54,7 @@ def test_full_tp_after_partial():
     em = ExitManager()
     trade = make_trade(entry=100.0, sl=95.0, tp=110.0)
     trade.partial_exit_done = True  # already partially exited
-    should_exit, reason = em.check_exit(
+    should_exit, reason, _ = em.check_exit(
         price=110.0,
         signal_direction="BUY",
         trade=trade,
@@ -68,7 +68,7 @@ def test_full_tp_after_partial():
 def test_stop_loss_before_partial():
     em = ExitManager()
     trade = make_trade(entry=100.0, sl=95.0, tp=110.0)
-    should_exit, reason = em.check_exit(
+    should_exit, reason, _ = em.check_exit(
         price=94.0,
         signal_direction="SELL",
         trade=trade,

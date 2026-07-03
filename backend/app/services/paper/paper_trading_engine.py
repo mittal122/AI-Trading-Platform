@@ -203,13 +203,15 @@ class PaperTradingEngine:
             self._open_position(signal, portfolio, equity)
 
         elif self._open_trade is not None and self._trade_manager.should_exit(
-            signal, portfolio, self._open_trade, atr=signal.atr or 0.0
+            signal, portfolio, self._open_trade, atr=signal.atr or 0.0,
+            high=float(market.iloc[-1]["high"]), low=float(market.iloc[-1]["low"]),
         ):
             reason = self._trade_manager.last_exit_reason or "SIGNAL_REVERSAL"
+            exit_price = self._trade_manager.last_exit_price or signal.entry
             if reason == "PARTIAL_EXIT":
-                self._partial_close(signal, portfolio)
+                self._partial_close(signal, portfolio, exit_price)
             else:
-                self._full_close(signal, portfolio, reason)
+                self._full_close(signal, portfolio, reason, exit_price)
 
     # ------------------------------------------------------------------
     # Position management
@@ -256,11 +258,11 @@ class PaperTradingEngine:
         self._log_trade("BUY", execution.executed_price, execution.quantity, 0.0, "OPEN")
         print(f"[Paper] BUY  {execution.quantity:.6f} @ {execution.executed_price:.2f}")
 
-    def _partial_close(self, signal, portfolio) -> None:
+    def _partial_close(self, signal, portfolio, exit_price: float = None) -> None:
         partial_qty = self._open_trade.quantity * 0.5
         execution = self._execution.execute(
             side=OrderSide.SELL,
-            price=signal.entry,
+            price=exit_price if exit_price is not None else signal.entry,
             quantity=partial_qty,
         )
         self._portfolio.sell(execution)
@@ -278,10 +280,10 @@ class PaperTradingEngine:
         self._open_trade.quantity -= partial_qty
         print(f"[Paper] PARTIAL_EXIT {partial_qty:.6f} @ {execution.executed_price:.2f} PnL={pnl:.2f}")
 
-    def _full_close(self, signal, portfolio, reason: str) -> None:
+    def _full_close(self, signal, portfolio, reason: str, exit_price: float = None) -> None:
         execution = self._execution.execute(
             side=OrderSide.SELL,
-            price=signal.entry,
+            price=exit_price if exit_price is not None else signal.entry,
             quantity=portfolio.position_quantity,
         )
         self._portfolio.sell(execution)

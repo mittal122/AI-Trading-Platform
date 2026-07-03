@@ -7,6 +7,8 @@ const LINKS = [
   { to: '/portfolio', label: 'Portfolio',  icon: '◈'  },
   { to: '/paper',     label: 'Paper Trade',icon: '◻'  },
   { to: '/chat',      label: 'AI Chat',    icon: '✦'  },
+  { to: '/patterns',  label: 'Patterns',   icon: '◭'  },
+  { to: '/patterns/dashboard', label: 'Pattern Dashboard', icon: '☰'  },
   { to: '/settings',  label: 'Settings',   icon: '⚙'  },
 ]
 

@@ -111,6 +111,7 @@ class SimpleTradingEngine(BaseTradingEngine):
                 self.trade_recorder.open_trade(
                     entry_price=execution.executed_price,
                     quantity=execution.quantity,
+                    entry_timestamp=signal.timestamp,
                 )
 
                 self.open_trade = TradeState(
@@ -132,29 +133,37 @@ class SimpleTradingEngine(BaseTradingEngine):
         # EXIT check (partial or full)
         # -----------------------------------
 
-        elif self.open_trade is not None and self.trade_manager.should_exit(
-            signal,
-            portfolio,
-            self.open_trade,
-            atr=signal.atr or 0.0,
-        ):
+        else:
+            last_candle = market.iloc[-1]
+            high = float(last_candle["high"])
+            low = float(last_candle["low"])
 
-            reason = self.trade_manager.last_exit_reason or "SIGNAL_REVERSAL"
+            if self.open_trade is not None and self.trade_manager.should_exit(
+                signal,
+                portfolio,
+                self.open_trade,
+                atr=signal.atr or 0.0,
+                high=high,
+                low=low,
+            ):
 
-            if reason == "PARTIAL_EXIT":
-                self._partial_close(signal, portfolio)
-            else:
-                self._full_close(signal, portfolio, reason)
+                reason = self.trade_manager.last_exit_reason or "SIGNAL_REVERSAL"
+                exit_price = self.trade_manager.last_exit_price or signal.entry
+
+                if reason == "PARTIAL_EXIT":
+                    self._partial_close(signal, portfolio, exit_price)
+                else:
+                    self._full_close(signal, portfolio, reason, exit_price)
 
         return self.portfolio.get_state()
 
-    def _partial_close(self, signal, portfolio):
+    def _partial_close(self, signal, portfolio, exit_price: float = None):
         """Close 50% of position at 1:1 RR target."""
         partial_qty = self.open_trade.quantity * 0.5
 
         execution = self.execution.execute(
             side=OrderSide.SELL,
-            price=signal.entry,
+            price=exit_price if exit_price is not None else signal.entry,
             quantity=partial_qty,
         )
 
@@ -170,11 +179,11 @@ class SimpleTradingEngine(BaseTradingEngine):
             f"Closed 50% ({partial_qty:.6f}) | Remaining: {self.open_trade.quantity:.6f}"
         )
 
-    def _full_close(self, signal, portfolio, reason: str):
+    def _full_close(self, signal, portfolio, reason: str, exit_price: float = None):
         """Close full open position."""
         execution = self.execution.execute(
             side=OrderSide.SELL,
-            price=signal.entry,
+            price=exit_price if exit_price is not None else signal.entry,
             quantity=portfolio.position_quantity,
         )
 
@@ -183,7 +192,12 @@ class SimpleTradingEngine(BaseTradingEngine):
         pnl = (execution.executed_price - self.open_trade.entry_price) * execution.quantity
         self.daily_loss_limit.record_pnl(pnl)
 
-        self.trade_recorder.close_trade(exit_price=execution.executed_price)
+        self.trade_recorder.close_trade(
+            exit_price=execution.executed_price,
+            exit_timestamp=signal.timestamp,
+            candles_held=self.open_trade.candles_held,
+            exit_reason=reason,
+        )
 
         print(f"{reason} | {execution.executed_price:.2f} | Qty: {execution.quantity:.6f}")
 

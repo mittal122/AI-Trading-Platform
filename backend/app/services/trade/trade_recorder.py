@@ -9,6 +9,7 @@ class TradeRecorder:
 
         self.entry_price = None
         self.quantity = 0.0
+        self.entry_timestamp = None
 
         self.trades = []
 
@@ -16,14 +17,19 @@ class TradeRecorder:
         self,
         entry_price: float,
         quantity: float,
+        entry_timestamp: str = "",
     ):
 
         self.entry_price = entry_price
         self.quantity = quantity
+        self.entry_timestamp = entry_timestamp
 
     def close_trade(
         self,
         exit_price: float,
+        exit_timestamp: str = "",
+        candles_held: int = 0,
+        exit_reason: str = "",
     ):
 
         if self.entry_price is None:
@@ -52,6 +58,10 @@ class TradeRecorder:
                 quantity=self.quantity,
                 pnl=pnl,
                 return_percent=return_percent,
+                entry_timestamp=self.entry_timestamp or "",
+                exit_timestamp=exit_timestamp,
+                candles_held=candles_held,
+                exit_reason=exit_reason,
 
             )
 
@@ -59,6 +69,7 @@ class TradeRecorder:
 
         self.entry_price = None
         self.quantity = 0.0
+        self.entry_timestamp = None
 
     def get_trades(
         self,

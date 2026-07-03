@@ -47,3 +47,13 @@ class TradingSignal(BaseModel):
     quality_grade: Optional[str] = None
 
     explanation: Optional[str] = None
+
+    # Estimated candles/time to reach take_profit — ATR-velocity heuristic,
+    # helps a user judge whether this strategy suits this timeframe.
+    eta_candles: Optional[int] = None
+
+    eta_display: Optional[str] = None
+
+    # Set only when this signal came from a batch scan and this particular
+    # strategy/timeframe failed to compute — the rest of the batch still returns.
+    error: Optional[str] = None

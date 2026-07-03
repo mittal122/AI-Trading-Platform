@@ -71,9 +71,12 @@ export default function SignalCard({ signal }: { signal: TradingSignal }) {
       </div>
 
       {/* Metrics */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className={`grid ${signal.eta_display ? 'grid-cols-3' : 'grid-cols-2'} gap-3`}>
         <Stat label="Confidence" value={`${(signal.confidence).toFixed(1)}%`} />
         <Stat label="Risk/Reward" value={`1:${signal.risk_reward.toFixed(2)}`} />
+        {signal.eta_display && (
+          <Stat label="Est. Time to Target" value={signal.eta_display} color="text-indigo-400" />
+        )}
       </div>
 
       {/* Reasons */}

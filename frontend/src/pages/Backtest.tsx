@@ -18,7 +18,7 @@ const PAGE_SIZE_OPTIONS = [
 function DetailRow({ r }: { r: BacktestRunItem }) {
   return (
     <tr className="bg-[#0f1117]/50">
-      <td colSpan={10} className="px-4 py-3">
+      <td colSpan={11} className="px-4 py-3">
         <div className="grid grid-cols-3 md:grid-cols-7 gap-3 text-xs">
           <div><p className="text-slate-500">Winning</p><p className="text-green-400 font-medium">{r.winning_trades}</p></div>
           <div><p className="text-slate-500">Losing</p><p className="text-red-400 font-medium">{r.losing_trades}</p></div>
@@ -49,7 +49,8 @@ function HistoryTable({ rows, onDeleteRow, expanded, toggleExpand }: {
             <th className="pb-2 pr-4">Strategy</th><th className="pb-2 pr-4">Symbol</th>
             <th className="pb-2 pr-4">Interval</th><th className="pb-2 pr-4">Candles</th>
             <th className="pb-2 pr-4">Return</th><th className="pb-2 pr-4">Trades</th>
-            <th className="pb-2 pr-4">Win%</th><th className="pb-2 pr-4">Sharpe</th>
+            <th className="pb-2 pr-4">Win%</th><th className="pb-2 pr-4">Avg Time to Win</th>
+            <th className="pb-2 pr-4">Sharpe</th>
             <th className="pb-2 pr-4">Time</th><th className="pb-2"></th>
           </tr>
         </thead>
@@ -71,6 +72,7 @@ function HistoryTable({ rows, onDeleteRow, expanded, toggleExpand }: {
                 </td>
                 <td className="py-2 pr-4 text-slate-400">{r.total_trades}</td>
                 <td className="py-2 pr-4 text-slate-400">{r.win_rate.toFixed(1)}%</td>
+                <td className="py-2 pr-4 text-indigo-400">{r.avg_time_to_win_display || '—'}</td>
                 <td className="py-2 pr-4 text-slate-400">{r.sharpe_ratio.toFixed(2)}</td>
                 <td className="py-2 pr-4 text-slate-600 text-xs">{new Date(r.created_at).toLocaleString()}</td>
                 <td className="py-2">

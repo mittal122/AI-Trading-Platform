@@ -219,13 +219,15 @@ class LiveTradingEngine:
             await self._open_position(signal, portfolio, equity)
 
         elif self._open_trade is not None and self._trade_manager.should_exit(
-            signal, portfolio, self._open_trade, atr=signal.atr or 0.0
+            signal, portfolio, self._open_trade, atr=signal.atr or 0.0,
+            high=float(market.iloc[-1]["high"]), low=float(market.iloc[-1]["low"]),
         ):
             reason = self._trade_manager.last_exit_reason or "SIGNAL_REVERSAL"
+            exit_price = self._trade_manager.last_exit_price or signal.entry
             if reason == "PARTIAL_EXIT":
-                await self._partial_close(signal, portfolio)
+                await self._partial_close(signal, portfolio, exit_price)
             else:
-                await self._market_close(portfolio, reason, price_override=signal.entry)
+                await self._market_close(portfolio, reason, price_override=exit_price)
 
     # ------------------------------------------------------------------
     # Position management (async wrappers for thread-safe order placement)
@@ -269,12 +271,12 @@ class LiveTradingEngine:
         mode = "[DRY]" if self.config.dry_run else "[LIVE]"
         print(f"{mode} BUY  {execution.quantity:.6f} @ {execution.executed_price:.2f}")
 
-    async def _partial_close(self, signal, portfolio) -> None:
+    async def _partial_close(self, signal, portfolio, exit_price: float = None) -> None:
         partial_qty = self._open_trade.quantity * 0.5
         execution = await asyncio.to_thread(
             self._execution.execute,
             OrderSide.SELL,
-            signal.entry,
+            exit_price if exit_price is not None else signal.entry,
             partial_qty,
         )
         self._portfolio.sell(execution)
