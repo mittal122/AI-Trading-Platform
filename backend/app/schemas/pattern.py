@@ -45,6 +45,9 @@ class ZoneAnnotation(BaseModel):
 class LevelAnnotation(BaseModel):
     label: str
     price: float
+    # Optional strength signal (e.g. touch count for Support & Resistance) —
+    # frontend uses this to shade a level light-to-dark by conviction.
+    strength: Optional[float] = None
 
 
 class LabelAnnotation(BaseModel):

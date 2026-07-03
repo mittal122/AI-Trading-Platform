@@ -1,7 +1,9 @@
 class AnalysisConfig:
 
-    # Support & Resistance
-    SR_LOOKBACK_BARS = 200
+    # Support & Resistance — scaled to the full per-request ceiling (1000)
+    # so historical levels well back in the loaded dataset still surface,
+    # not just a trailing 200-bar slice regardless of how much was fetched.
+    SR_LOOKBACK_BARS = 1000
     SR_LEVEL_TOLERANCE_PCT = 0.5          # cluster tolerance for "same level"
     SR_MIN_TOUCHES = 2
     SR_PSYCHOLOGICAL_ROUND_DIGITS = 2      # round-number levels: nearest 10^N below price magnitude
@@ -11,10 +13,12 @@ class AnalysisConfig:
     MA_GOLDEN_DEATH_FAST = 50
     MA_GOLDEN_DEATH_SLOW = 200
 
-    # VWAP
+    # VWAP — anchored VWAP's swing-anchor search benefits from more history
+    # too (finds a more significant anchor instead of whatever's in a small
+    # trailing window)
     VWAP_STDDEV_MULTIPLIER_1 = 1.0
     VWAP_STDDEV_MULTIPLIER_2 = 2.0
-    VWAP_LOOKBACK_BARS = 300
+    VWAP_LOOKBACK_BARS = 1000
 
     # Pivot Points — based on the prior full daily period's H/L/C regardless
     # of the chart's own interval (the professional convention: daily pivots

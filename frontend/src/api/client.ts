@@ -92,6 +92,12 @@ export const getMarket = (symbol: string, interval: string, limit = 200, endTime
     '/market/history', { params: { symbol, interval, limit, end_time: endTime } }
   )
 
+// The current (possibly still-forming) candle — Binance's kline stream keeps
+// updating this bar's high/low/close/volume until it closes. Poll this to
+// keep a chart's last bar live instead of a one-time static snapshot.
+export const getLiveMarket = (symbol: string, interval: string) =>
+  api.get<Candle>('/market/live', { params: { symbol, interval } })
+
 export const getIndicators = (symbol: string, interval: string, limit = 200) =>
   api.get<{ symbol: string; interval: string; indicators: Indicators }>(
     '/indicator', { params: { symbol, interval, limit } }
@@ -120,7 +126,7 @@ export interface ZoneAnnotation {
   label: string; start_time: string; end_time: string
   top: number; bottom: number; bias?: 'BULLISH' | 'BEARISH' | 'NEUTRAL'
 }
-export interface LevelAnnotation { label: string; price: number }
+export interface LevelAnnotation { label: string; price: number; strength?: number }
 export interface LabelAnnotation { text: string; time: string; price: number }
 export interface ChartAnnotations {
   trendlines: TrendlineAnnotation[]; zones: ZoneAnnotation[]
@@ -181,6 +187,13 @@ export interface PatternDashboardResponse {
 
 export const scanPatterns = (symbol: string, interval: string, limit = 300) =>
   api.get<PatternScanResponse>('/patterns/scan', { params: { symbol, interval, limit } })
+
+// On-demand AI explanation for ONE pattern — scan() itself is fast/algorithmic
+// only by default (see /patterns/scan's include_ai param); call this for
+// whichever pattern the user actually selects instead of auto-explaining
+// every pattern in a scan (that's what made scans routinely take 50-90s+).
+export const explainPattern = (pattern: DetectedPattern) =>
+  api.post<AIPatternExplanation>('/patterns/explain', pattern)
 
 export const scanPatternsMultiTimeframe = (symbol: string, intervals?: string[], limit = 300) =>
   api.get<PatternScanResponse[]>('/patterns/multi-timeframe', {

@@ -33,15 +33,33 @@ for key in PatternFactory.list_detectors():
     print(f"{key:<20} -> {len(results)} pattern(s)")
 print("PASS: every detector runs without error and returns well-formed patterns")
 
-print("\n========== FULL SCAN (with AI) ==========\n")
+print("\n========== FULL SCAN (fast path, no AI — the new default) ==========\n")
+import time as _time
+t0 = _time.time()
 result = scanner.scan("BTCUSDT", "1h", limit=300)
+elapsed = _time.time() - t0
 assert result.error is None
 seen_ids = {p.id for p in result.patterns}
 assert len(seen_ids) == len(result.patterns), "expected unique pattern ids"
 for p in result.patterns:
     assert p.confidence >= 40.0, "scan should filter below PATTERN_SCAN_MIN_CONFIDENCE"
-    assert p.ai is not None, "every pattern should get an AI attachment attempt"
-print(f"PASS: scan() returned {len(result.patterns)} patterns, {len(result.fvgs)} fvgs, all above confidence floor")
+    assert p.ai is None, "include_ai defaults to False — scan() should NOT auto-attach AI"
+assert elapsed < 15.0, f"fast-path scan should be well under 15s, took {elapsed:.1f}s"
+print(f"PASS: scan() returned {len(result.patterns)} patterns, {len(result.fvgs)} fvgs in {elapsed:.1f}s, no AI attached")
+
+print("\n========== ON-DEMAND EXPLAIN (single pattern) ==========\n")
+if result.patterns:
+    explanation = scanner.explain_pattern(result.patterns[0])
+    assert explanation.error is None, f"explain_pattern failed: {explanation.error}"
+    print(f"PASS: explain_pattern() returned a recommendation of {explanation.recommendation}")
+else:
+    print("SKIP: no patterns found this run to explain")
+
+print("\n========== FULL SCAN (include_ai=True, opt-in) ==========\n")
+result_ai = scanner.scan("BTCUSDT", "1h", limit=300, include_ai=True)
+for p in result_ai.patterns:
+    assert p.ai is not None, "include_ai=True should attach an AI attempt to every pattern"
+print(f"PASS: scan(include_ai=True) attached AI to all {len(result_ai.patterns)} patterns")
 
 print("\n========== MULTI-TIMEFRAME SCAN ==========\n")
 tf_results = scanner.scan_multi_timeframe("BTCUSDT", intervals=["15m", "1h"], limit=300)

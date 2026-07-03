@@ -56,10 +56,10 @@ class SupportResistanceTool(BaseAnalysisTool):
 
         annotations = ChartAnnotations(
             levels=[
-                LevelAnnotation(label=f"resistance (touched {l['touches']}x)", price=l["price"])
+                LevelAnnotation(label=f"resistance (touched {l['touches']}x)", price=l["price"], strength=l["touches"])
                 for l in resistance_levels
             ] + [
-                LevelAnnotation(label=f"support (touched {l['touches']}x)", price=l["price"])
+                LevelAnnotation(label=f"support (touched {l['touches']}x)", price=l["price"], strength=l["touches"])
                 for l in support_levels
             ] + [
                 LevelAnnotation(label="psychological", price=p) for p in psychological

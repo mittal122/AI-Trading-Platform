@@ -9,7 +9,11 @@ from abc import ABC
 
 from openai import OpenAI
 
-from backend.app.core.ai_provider_config import ServiceModelConfig
+from backend.app.core.ai_provider_config import (
+    AI_REQUEST_TIMEOUT_SECONDS,
+    AI_SDK_MAX_RETRIES,
+    ServiceModelConfig,
+)
 
 
 class MultiProviderAIService(ABC):
@@ -21,7 +25,12 @@ class MultiProviderAIService(ABC):
                 f"{config.connection.api_key_env} environment variable not set "
                 f"(required for {config.connection.name}/{config.model})"
             )
-        self._client = OpenAI(base_url=config.connection.base_url, api_key=api_key)
+        self._client = OpenAI(
+            base_url=config.connection.base_url,
+            api_key=api_key,
+            timeout=AI_REQUEST_TIMEOUT_SECONDS,
+            max_retries=AI_SDK_MAX_RETRIES,
+        )
         self._model = config.model
         self._temperature = config.temperature
         self._top_p = config.top_p

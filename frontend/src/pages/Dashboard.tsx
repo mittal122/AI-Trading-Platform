@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts'
 import type { ISeriesApi, LogicalRange, UTCTimestamp } from 'lightweight-charts'
-import { getMarket, getIndicators, getSignal } from '../api/client'
+import { getMarket, getLiveMarket, getIndicators, getSignal } from '../api/client'
 import type { Candle, TradingSignal, Indicators } from '../api/client'
 import SignalCard from '../components/SignalCard'
 import IndicatorPanel from '../components/IndicatorPanel'
@@ -14,6 +14,9 @@ const PAGE_CANDLES = 500
 // Start fetching more history once the visible chart is within this many
 // bars of the oldest candle currently loaded ("scrolled near the left edge").
 const LOAD_MORE_THRESHOLD_BARS = 20
+// How often the chart's last (possibly still-forming) candle is refreshed —
+// without this the chart was a one-time static snapshot that never moved.
+const LIVE_POLL_MS = 5000
 
 function toBarTime(timestamp: string): UTCTimestamp {
   return Math.floor(new Date(timestamp).getTime() / 1000) as UTCTimestamp
@@ -138,10 +141,29 @@ export default function Dashboard() {
 
     chart.timeScale().subscribeVisibleLogicalRangeChange(onVisibleRangeChange)
 
+    const liveTimer = window.setInterval(async () => {
+      if (allCandles.length === 0) return
+      try {
+        const res = await getLiveMarket(SYMBOL, INTERVAL)
+        const live = res.data
+        candleSeries.update(toBar(live))
+
+        const lastIdx = allCandles.length - 1
+        if (allCandles[lastIdx].timestamp === live.timestamp) {
+          allCandles[lastIdx] = live
+        } else if (new Date(live.timestamp) > new Date(allCandles[lastIdx].timestamp)) {
+          allCandles = [...allCandles, live]
+        }
+      } catch {
+        // transient network hiccup — next tick retries
+      }
+    }, LIVE_POLL_MS)
+
     const resize = () => chart.applyOptions({ width: chartRef.current!.clientWidth })
     window.addEventListener('resize', resize)
     return () => {
       window.removeEventListener('resize', resize)
+      window.clearInterval(liveTimer)
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onVisibleRangeChange)
       chart.remove()
     }

@@ -18,12 +18,20 @@ class PatternScanner:
     """
     Orchestrates the pattern module. Every registered detector runs
     concurrently against a single market-data fetch (detection itself is
-    fast, pure-CPU geometry — the fetch dominates). Patterns clearing the
-    confidence floor each get an AI explanation auto-generated
-    (`PatternExplainer`, called concurrently too, since the underlying
-    client is a blocking HTTP call) — if NVIDIA_API_KEY isn't configured,
-    patterns still come back with their algorithmic data intact, just with
-    `ai.error` set instead of failing the whole scan.
+    fast, pure-CPU geometry — the fetch dominates, confirmed sub-3s even at
+    1000 candles).
+
+    AI explanation is OPT-IN per call (`include_ai=False` by default) —
+    it used to auto-generate for every pattern found, but once the detector
+    lookback windows were widened (to actually cover the full loaded chart
+    history, not just a trailing slice), a single scan could find 3x more
+    patterns than before, and AI-explaining all of them serially in batches
+    of `PATTERN_AI_MAX_WORKERS` routinely took 50-90s — past the frontend's
+    30s timeout, which is why scans were "failing most of the time." The
+    fix: `scan()`/`scan_multi_timeframe()` return fast, algorithmic-only
+    results by default; `explain_pattern()` generates AI for exactly the one
+    pattern a user is actually looking at, on demand (same on-demand design
+    already used for the Analysis Tools' AI confluence call).
     """
 
     def __init__(self):
@@ -51,7 +59,9 @@ class PatternScanner:
                 return None
         return self._ai_explainer
 
-    def scan(self, symbol: str, interval: str, limit: int = 300) -> PatternScanResponse:
+    def scan(
+        self, symbol: str, interval: str, limit: int = 300, include_ai: bool = False,
+    ) -> PatternScanResponse:
         try:
             market = self.market.get_market_data(symbol=symbol, interval=interval, limit=limit)
         except Exception as exc:
@@ -71,24 +81,35 @@ class PatternScanner:
 
         min_conf = pattern_config.PATTERN_SCAN_MIN_CONFIDENCE
         patterns = [p for p in all_patterns if p.confidence >= min_conf]
-        patterns = self._attach_ai(patterns)
+        if include_ai:
+            patterns = self._attach_ai(patterns)
 
         return PatternScanResponse(
             symbol=symbol, interval=interval, patterns=patterns, fvgs=fvgs, scanned_at=now_iso(),
         )
 
+    def explain_pattern(self, pattern: DetectedPattern) -> AIPatternExplanation:
+        """On-demand AI explanation for exactly one pattern — the fast path
+        for a user selecting a single pattern in the UI."""
+        explainer = self._get_explainer()
+        if explainer is None:
+            return AIPatternExplanation(error=self._ai_unavailable_reason or "AI explainer not configured")
+        return self._safe_explain(explainer, pattern)
+
     def scan_multi_timeframe(
-        self, symbol: str, intervals: list[str] = None, limit: int = 300,
+        self, symbol: str, intervals: list[str] = None, limit: int = 300, include_ai: bool = False,
     ) -> list[PatternScanResponse]:
         intervals = intervals or pattern_config.PATTERN_SCAN_INTERVALS
         with ThreadPoolExecutor(max_workers=pattern_config.PATTERN_SCAN_MAX_WORKERS) as pool:
-            futures = [pool.submit(self.scan, symbol, tf, limit) for tf in intervals]
+            futures = [pool.submit(self.scan, symbol, tf, limit, include_ai) for tf in intervals]
             return [f.result() for f in futures]
 
     def dashboard(
         self, symbol: str, intervals: list[str] = None, limit: int = 300,
     ) -> PatternDashboardResponse:
-        results = self.scan_multi_timeframe(symbol, intervals, limit)
+        # Dashboard rows never surface AI fields at all (see PatternDashboardRow)
+        # — always skip AI generation here regardless of caller preference.
+        results = self.scan_multi_timeframe(symbol, intervals, limit, include_ai=False)
         rows = [
             PatternDashboardRow(
                 symbol=p.symbol, interval=p.interval, pattern_name=p.pattern_name,

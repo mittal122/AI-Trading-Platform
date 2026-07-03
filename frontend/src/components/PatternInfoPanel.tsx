@@ -32,7 +32,7 @@ function fmt(v?: number) {
   return v === undefined || v === null ? '—' : `$${v.toFixed(2)}`
 }
 
-export default function PatternInfoPanel({ pattern }: { pattern: DetectedPattern }) {
+export default function PatternInfoPanel({ pattern, aiLoading }: { pattern: DetectedPattern; aiLoading?: boolean }) {
   const ai = pattern.ai
 
   return (
@@ -82,7 +82,12 @@ export default function PatternInfoPanel({ pattern }: { pattern: DetectedPattern
       </div>
 
       {/* AI Explanation */}
-      {ai && !ai.error && (
+      {aiLoading && (
+        <div className="border-t border-[#2a2d3e] pt-4">
+          <p className="text-xs text-slate-500">Generating AI analysis for this pattern…</p>
+        </div>
+      )}
+      {!aiLoading && ai && !ai.error && (
         <div className="border-t border-[#2a2d3e] pt-4 space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="text-sm font-semibold text-indigo-300">AI Analysis</h4>
@@ -109,7 +114,7 @@ export default function PatternInfoPanel({ pattern }: { pattern: DetectedPattern
           </div>
         </div>
       )}
-      {ai?.error && (
+      {!aiLoading && ai?.error && (
         <p className="text-xs text-slate-600 border-t border-[#2a2d3e] pt-3">AI explanation unavailable ({ai.error.slice(0, 120)})</p>
       )}
     </div>

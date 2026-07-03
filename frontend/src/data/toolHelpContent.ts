@@ -188,6 +188,39 @@ export const TOOL_HELP: Record<string, ToolHelpContent> = {
     whenToAvoid: 'Don\'t use ATR-based stops as your ONLY exit logic in a strongly trending market — pure ATR trailing can exit trend trades too early.',
     combineWith: 'Every directional tool (S/R, Moving Averages, Patterns) — ATR provides the risk-sizing layer on top of whatever gives you the directional signal.',
   },
+
+  fvg: {
+    key: 'fvg',
+    name: 'Fair Value Gaps',
+    whatIsIt: 'A 3-candle price imbalance — a gap between candle 1\'s wick and candle 3\'s wick left untraded by a fast, displacement-style move on candle 2. Bullish FVG: candle 3\'s low is above candle 1\'s high. Bearish: the mirror.',
+    whyTradersUseIt: 'The gap represents an area with almost no two-way trading — price moved through it too fast for real buyers and sellers to meet there, so it is considered "inefficient" and often gets revisited before the move continues.',
+    whatItDetects: 'Every 3-candle imbalance in the lookback window that is large enough (relative to ATR) to count as a real institutional-style displacement, tracked as filled (price has traded back into it) or unfilled (still open).',
+    whyItMatters: 'FVGs are one of the core building blocks of Smart-Money-Concepts (SMC) trading — they mark exactly where a market maker\'s fast move left a footprint, which many traders treat as a magnet / re-entry zone.',
+    calculationMethod: 'For candles 1/2/3 in sequence: bullish gap = low[3] > high[1], gap zone = [high[1], low[3]]. Bearish gap = high[3] < low[1], gap zone = [high[3], low[1]]. A gap only counts if its size is at least a configured fraction of ATR (filters out tiny, meaningless gaps). "Filled" = a later candle\'s range trades back into the gap zone.',
+    detectionLogic: 'Only UNFILLED gaps are drawn on the chart — filled ones are considered resolved/stale and would just clutter the view.',
+    aiInvolvement: 'None in detection (pure 3-candle geometry). AI (on-demand) can reason about FVG bias alongside other enabled tools.',
+    mathConcepts: 'Simple range comparison across a 3-candle window; gap "strength" scales with gap-size ÷ ATR.',
+    whenToEnable: 'Especially useful alongside Market Structure / SMC-style trading, or any strategy that treats "return to inefficiency" as a valid entry trigger.',
+    howToInterpret: 'An unfilled bullish FVG below current price is a potential support/re-entry zone on a pullback; an unfilled bearish FVG above price is a potential resistance/re-entry zone on a rally. More recent, larger (relative to ATR) gaps are generally more significant.',
+    howToConfirm: 'Don\'t treat every FVG as guaranteed to be revisited — wait for price to actually approach the zone and show a reaction (rejection wick, momentum shift) before treating it as a trade trigger.',
+    commonMistakes: [
+      'Treating ALL gaps as equally significant — a tiny gap barely above the ATR threshold means much less than a large displacement gap.',
+      'Assuming a gap MUST get filled before the trend continues — many gaps, especially in strong trends, never get revisited at all.',
+      'Ignoring how old the gap is — very old unfilled gaps are less reliable than fresh ones.',
+    ],
+    bestPractices: [
+      'Weight FVGs that align with the higher-timeframe trend direction more heavily.',
+      'Look for FVGs that overlap with other confluence (a support level, a moving average) rather than trading them in isolation.',
+      'Treat gap "fill" as a zone to react to, not an exact price to blindly buy/sell at.',
+    ],
+    recommendedTimeframe: 'Works on any timeframe; lower timeframes produce far more (and noisier) gaps than higher timeframes.',
+    recommendedConditions: 'Most meaningful after a strong impulsive/displacement move, not in slow, grinding chop.',
+    realExample: 'If price rallies hard, leaving a bullish FVG behind, then later pulls back and taps exactly into that gap zone before resuming upward with a bullish rejection candle, that is the textbook "fill the gap, continue the trend" FVG setup.',
+    institutionalUse: 'The "fair value gap" framing comes directly from Smart Money Concepts / ICT-style retail-institutional trading theory — the idea being that large orders create displacement that leaves inefficient pricing behind, which smart money later uses to re-enter positions.',
+    whenItFails: 'In strong, fast trends, price can leave many gaps behind that simply never fill — treating every gap as a certain revisit will produce a lot of missed continuation moves.',
+    whenToAvoid: 'Avoid trading a stand-alone gap fill against a strong, established higher-timeframe trend.',
+    combineWith: 'Market Structure/SMC concepts (order blocks, BOS/CHOCH), Support & Resistance (a gap that lines up with a known level is stronger), and ATR (to judge if a gap is actually significant).',
+  },
 }
 
-export const TOOL_HELP_ORDER = ['support_resistance', 'moving_averages', 'vwap', 'pivot_points', 'atr']
+export const TOOL_HELP_ORDER = ['support_resistance', 'moving_averages', 'vwap', 'pivot_points', 'atr', 'fvg']

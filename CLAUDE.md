@@ -927,6 +927,101 @@ return correct status codes. Frontend typechecks clean, Vite serves every new
 file, both backend/frontend processes confirmed single-instance and healthy,
 backend log clean of errors/tracebacks.
 
+### Post-Phase-10 fix — Pattern Analysis infinite scroll + real FVG rectangles (2026-07-03)
+
+Two follow-ups on the Pattern/Analysis modules, both from direct user feedback:
+
+- **Chart stopped loading past ~400-500 candles on the Patterns page** —
+  unlike Dashboard.tsx (already fixed earlier), `PatternAnalysis.tsx` never
+  got the backward-pagination logic. Ported it over (same `end_time`-based
+  approach, `subscribeVisibleLogicalRangeChange`), plus added an in-memory
+  page cache (`Map` keyed by symbol/interval/end_time/limit) so re-scrolling
+  back and forth over an already-visited range doesn't re-hit Binance.
+- **Detectors were internally capped well below what got fetched** — even
+  with more candles loaded on the chart, `FVGDetector`/`SMCDetector`/S&R/
+  classical patterns each re-sliced to their own small hardcoded lookback
+  window (FVG was 300 bars, SMC 150, S&R 200 — regardless of how much data
+  the caller fetched). Bumped these in `pattern_config.py`/`analysis_config.py`
+  to scale with the real per-request ceiling (1000, matching Binance/backend's
+  own max) — FVG/S&R/SMC to 1000/1000/500, classical shape patterns
+  (Double Top, H&S, Triangle, Wedge, Channel, Diamond/Broadening) to 300-400.
+  Left Cup&Handle/Flag/Pennant lookbacks alone deliberately — those patterns
+  have a real, bounded max duration by definition; scaling them up wouldn't
+  find more valid patterns, just waste cycles. Verified fast even at 1000
+  candles (full pattern-detector suite ~2.1s, analysis tools ~1s).
+- **Scan limit now scales with loaded history**: `scanLimit = min(max(loaded, 500), 1000)`
+  in `PatternAnalysis.tsx`. Analysis tools (no auto-AI) rescan automatically
+  as more history loads, debounced 1.2s. Pattern detection deliberately does
+  NOT auto-rescan on scroll (its scan auto-generates AI per pattern — see the
+  rate-limit lesson from the Pattern module's own build) — stays on the
+  existing manual "Rescan" button, which now just uses the current
+  `scanLimit` instead of a hardcoded 400. Confirmed live: more history →
+  proportionally more patterns/FVGs found → proportionally more AI-explain
+  calls → longer full-scan wall time (22 patterns vs 11 at the old lookback,
+  same test data) — this is the correct, disclosed tradeoff, not a
+  performance regression in detection itself.
+- **FVG zones (and every other zone-type annotation — order blocks, entry
+  zones, consolidation ranges) now render as real filled/bordered
+  rectangles**, not two dashed price lines. `frontend/src/lib/rectanglePrimitive.ts` —
+  a hand-implemented lightweight-charts v5 series primitive (canvas
+  `fillRect`/`strokeRect`, live time/price → pixel conversion so it tracks
+  pan/zoom automatically) — the library has no built-in shaded-box primitive,
+  had to build one. Watch for `erasableSyntaxOnly` in this project's
+  tsconfig — constructor parameter-property shorthand
+  (`constructor(private x: T)`) is rejected, use explicit field
+  declarations + manual assignment instead.
+- **FVG added as a proper toggle tool** (`fvg_tool.py`, wraps the existing
+  `FVGDetector`) — was previously only a passive count on the Patterns page,
+  now has its own button, chart zones, (ⓘ) help panel, and AI confluence
+  participation, matching the other 5 Analysis Tools.
+
+### Post-Phase-10 fix — Pattern scan timeout (2026-07-03) + AI client hardening
+
+User: "pattern scan is failing most of the time." Root-caused via live testing
+(not guessed): a fresh `/patterns/scan?limit=500` call on BTCUSDT/1h took
+50-90+ seconds and sometimes returned nothing inside a 90s window — well past
+the frontend's 30s axios timeout, which is exactly what "failing" looked like.
+
+- **Actual cause**: the lookback-window bump from the previous fix (finding
+  "all historical patterns") worked exactly as intended — 22-31 patterns
+  found now vs. 11 before on the same data. But `/patterns/scan` still
+  auto-generated an AI explanation for EVERY pattern found, sequentially in
+  batches of `PATTERN_AI_MAX_WORKERS=4`. More patterns found → proportionally
+  more AI-call batches → total time scaled with pattern count, not candle
+  count. This is the same on-demand-vs-auto tradeoff already applied to
+  Analysis Tools' AI confluence — just not yet applied to patterns when the
+  module was first built.
+- **Fix**: `PatternScanner.scan()`/`scan_multi_timeframe()` gained an
+  `include_ai: bool = False` param — algorithmic-only and fast by default now
+  (confirmed 2.5-4s consistently, vs. 50-90s before). New
+  `PatternScanner.explain_pattern(pattern)` + `POST /patterns/explain` —
+  on-demand AI for exactly the one pattern a user has selected, not the whole
+  batch. `dashboard()` hardcodes `include_ai=False` unconditionally (its row
+  schema never surfaced AI fields anyway — was wasted work before, not just
+  slow). `include_ai=True` still available as an explicit opt-in on
+  `/patterns/scan`/`/multi-timeframe` for anyone who wants the old
+  all-at-once behavior. Frontend: `PatternAnalysis.tsx` now fetches AI
+  on-demand per selection (`explainPattern()`, cached by pattern id so
+  re-selecting is instant), `PatternInfoPanel.tsx` shows a "Generating AI
+  analysis…" state meanwhile.
+- **Also found while debugging (real, separate issues, both fixed)**:
+  (1) the `openai.OpenAI` client had NO request timeout configured anywhere
+  — the SDK's own default is effectively unbounded, and a `ThreadPoolExecutor`
+  worker blocks on `.result()` until the call returns, so one slow/degraded
+  NIM response could stall an entire concurrent scan indefinitely with no
+  way to recover. Added `AI_REQUEST_TIMEOUT_SECONDS=20` (env-overridable) +
+  `AI_SDK_MAX_RETRIES=1` to `ai_provider_config.py`, applied in
+  `llm_client.py`'s `MultiProviderAIService.__init__` — this fixes ALL 9 AI
+  services at once, not just patterns. (2) Found (again) a leftover orphaned
+  `uvicorn` process from an earlier `pkill`-based restart that never actually
+  died, pegged at ~95% CPU competing with the real server for the GIL/CPU —
+  a red herring during this debugging session (fixed the real bug too, but
+  this wasn't the actual cause), but a reminder: after `pkill`, verify with
+  `ps aux | grep uvicorn` before trusting a restart, don't assume the kill
+  landed. (3) Backported the JSON-parsing regex-salvage fallback (built for
+  `AnalysisExplainer` a few turns ago) to `PatternExplainer` too — same
+  malformed-JSON failure mode is possible in both, only one had the fix.
+
 ---
 
 ## Immediate Next Task

@@ -27,6 +27,16 @@ class ProviderConnection:
     api_key_env: str
 
 
+# Per-call ceiling for every AI service — the openai SDK has NO timeout by
+# default (falls back to its own multi-minute internal default), and a
+# ThreadPoolExecutor worker blocks on .result() until a call returns. Without
+# this, one slow/hung NIM request stalls an entire concurrent scan (found live:
+# a /patterns/scan call hung 90s+ with nothing to show for it). max_retries is
+# the openai SDK's OWN automatic retry (separate from any retry-on-429 logic
+# in individual callers) — kept low so it doesn't compound with call-site retries.
+AI_REQUEST_TIMEOUT_SECONDS = float(os.getenv("AI_REQUEST_TIMEOUT_SECONDS", "20"))
+AI_SDK_MAX_RETRIES = int(os.getenv("AI_SDK_MAX_RETRIES", "1"))
+
 NIM = ProviderConnection(
     name="nvidia-nim",
     base_url=os.getenv("NVIDIA_NIM_BASE_URL", "https://integrate.api.nvidia.com/v1"),

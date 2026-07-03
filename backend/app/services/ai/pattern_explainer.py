@@ -1,4 +1,5 @@
 import json
+import re
 
 from backend.app.core.ai_provider_config import PATTERN_EXPLAINER
 from backend.app.schemas.pattern import AIPatternExplanation, DetectedPattern, PatternRecommendation
@@ -79,9 +80,21 @@ Explain this pattern and return JSON only.
     def _parse_json(text: str) -> dict:
         start = text.find("{")
         end = text.rfind("}") + 1
-        if start != -1 and end > start:
+        blob = text[start:end] if start != -1 and end > start else ""
+
+        if blob:
             try:
-                return json.loads(text[start:end])
+                return json.loads(blob)
             except json.JSONDecodeError:
                 pass
-        return {}
+
+        # LLMs occasionally emit near-JSON with a dropped quote or stray
+        # duplicate key — salvage individual "key": value pairs by regex
+        # instead of discarding the whole response over one glitched field
+        # (same fix already proven necessary in AnalysisExplainer).
+        result: dict = {}
+        for match in re.finditer(r'"(\w+)"\s*:\s*"([^"]*)"', blob):
+            result.setdefault(match.group(1), match.group(2))
+        for match in re.finditer(r'"(\w+)"\s*:\s*(-?\d+(?:\.\d+)?)', blob):
+            result.setdefault(match.group(1), float(match.group(2)))
+        return result
