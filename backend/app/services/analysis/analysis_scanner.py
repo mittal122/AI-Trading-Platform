@@ -22,7 +22,7 @@ class AnalysisScanner:
         self.market = MarketService()
 
     def scan(self, symbol: str, interval: str, tool_keys: list[str] = None, limit: int = 300) -> AnalysisScanResponse:
-        tool_keys = tool_keys or AnalysisFactory.list_tools()
+        tool_keys = AnalysisFactory.list_tools() if tool_keys is None else tool_keys
         try:
             market = self.market.get_market_data(symbol=symbol, interval=interval, limit=limit)
         except Exception:

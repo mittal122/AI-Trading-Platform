@@ -30,6 +30,9 @@ const MAX_SCAN_LIMIT = 1000
 // Analysis tools (no auto-AI) rescan as more history loads, but debounced —
 // don't fire a network call on every single scroll tick.
 const TOOL_RESCAN_DEBOUNCE_MS = 1200
+// Window to disambiguate a single click (hide/show) from a double click
+// (select for detail) on a pattern row.
+const PATTERN_CLICK_DELAY_MS = 220
 // How often the chart's last (possibly still-forming) candle is refreshed.
 // Only updates the visible bar via series.update() — does NOT re-trigger
 // pattern/tool scans (those stay on their existing triggers) to avoid the
@@ -68,6 +71,10 @@ export default function PatternAnalysis() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  // Every detected pattern is drawn on the chart by default — the eye button
+  // per row opts a specific one OUT (hides it), rather than an opt-in list,
+  // so newly-found patterns from a rescan show up without extra clicks.
+  const [hiddenPatternIds, setHiddenPatternIds] = useState<Set<string>>(new Set())
   // AI explanation is on-demand per selected pattern (not auto-generated for
   // every pattern in a scan — that's what made scans take 50-90s+). Cached
   // by pattern id so re-selecting an already-explained pattern is instant.
@@ -85,6 +92,16 @@ export default function PatternAnalysis() {
   const [loadedCount, setLoadedCount] = useState(0)
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [historyExhausted, setHistoryExhausted] = useState(false)
+  const [isFullscreen, setIsFullscreen] = useState(false)
+  // Secondary content (pattern list vs. tool results/AI confluence) is tabbed
+  // rather than always-stacked — keeps the chart the dominant element and
+  // avoids a long scroll past everything at once.
+  const [sidebarTab, setSidebarTab] = useState<'patterns' | 'tools'>('patterns')
+  // selectedId always tracks "which pattern is emphasized on chart / has its
+  // AI explanation fetched" (auto-set to the top result on every scan). The
+  // detail MODAL is a separate, explicit visibility flag — opened only by a
+  // double-click, never automatically by a rescan re-picking selectedId.
+  const [showDetailModal, setShowDetailModal] = useState(false)
 
   const chartRef = useRef<HTMLDivElement>(null)
   const chartApiRef = useRef<IChartApi | null>(null)
@@ -101,6 +118,18 @@ export default function PatternAnalysis() {
   // and forth) reuses the cached page instead of re-hitting Binance.
   const pageCacheRef = useRef(new Map<string, Candle[]>())
   const toolRescanTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Disambiguates single vs. double click on a pattern row: a single click
+  // is deferred behind this timer (toggles hide/show if nothing else
+  // happens); a genuine double-click cancels the pending timer and selects
+  // the pattern for the detail panel instead.
+  const patternClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const chartWrapperRef = useRef<HTMLDivElement>(null)
+  // Guards against out-of-order responses: if the tool selection changes
+  // again while a scan is in flight, a slower earlier request can resolve
+  // after a faster later one and overwrite it with stale results (e.g. a
+  // tool that was just disabled "reappearing"). Only the response matching
+  // the latest-fired request is allowed to update state.
+  const toolScanSeqRef = useRef(0)
   // The chart-setup effect below only runs once (mount) — its loadOlder()
   // closure would otherwise capture the symbol/interval from that first
   // render forever. Read the live values through these refs instead.
@@ -114,6 +143,9 @@ export default function PatternAnalysis() {
     : null
   const enabledSet = new Set(enabledTools)
   const scanLimit = Math.min(Math.max(loadedCount, INITIAL_CANDLES), MAX_SCAN_LIMIT)
+  // Highest-confidence pattern first — the list's own priority ranking.
+  const sortedPatterns = [...patterns].sort((a, b) => b.confidence - a.confidence)
+  const topPatternId = sortedPatterns[0]?.id ?? null
 
   async function fetchCandlesCached(sym: string, itv: string, limit: number, endTime?: number): Promise<Candle[]> {
     const cacheKey = `${sym}|${itv}|${endTime ?? 'latest'}|${limit}`
@@ -142,15 +174,20 @@ export default function PatternAnalysis() {
   }
 
   async function runToolScan() {
-    if (enabledTools.length === 0) { setToolResults([]); return }
+    const seq = ++toolScanSeqRef.current
+    if (enabledTools.length === 0) {
+      setToolResults([])
+      return
+    }
     setToolsLoading(true)
     try {
       const res = await scanAnalysisTools(symbol, interval, enabledTools, scanLimit)
+      if (seq !== toolScanSeqRef.current) return // a newer toggle superseded this request
       setToolResults(res.data.tools)
     } catch {
-      setToolResults([])
+      if (seq === toolScanSeqRef.current) setToolResults([])
     } finally {
-      setToolsLoading(false)
+      if (seq === toolScanSeqRef.current) setToolsLoading(false)
     }
   }
 
@@ -172,6 +209,14 @@ export default function PatternAnalysis() {
       enabledTools.includes(key) ? enabledTools.filter(k => k !== key) : [...enabledTools, key],
     )
     setAiExplanation(null)
+  }
+
+  function togglePatternVisibility(id: string) {
+    setHiddenPatternIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
   }
 
   // Fetch AI explanation for whichever pattern is selected — on demand, one
@@ -274,10 +319,27 @@ export default function PatternAnalysis() {
     }
     chart.timeScale().subscribeVisibleLogicalRangeChange(onVisibleRangeChange)
 
-    const resize = () => chart.applyOptions({ width: chartRef.current!.clientWidth })
-    window.addEventListener('resize', resize)
+    // Fullscreen shows the same chart instance stretched to fill the
+    // screen — resize on every window resize AND whenever fullscreen is
+    // entered/exited (the wrapper's available height changes, but its own
+    // width/height CSS doesn't fire a plain 'resize' event on some browsers).
+    const applySize = () => {
+      if (!chartRef.current) return
+      const fs = document.fullscreenElement === chartWrapperRef.current
+      chart.applyOptions({
+        width: chartRef.current.clientWidth,
+        height: fs ? window.innerHeight - 140 : 420,
+      })
+    }
+    const onFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === chartWrapperRef.current)
+      applySize()
+    }
+    window.addEventListener('resize', applySize)
+    document.addEventListener('fullscreenchange', onFullscreenChange)
     return () => {
-      window.removeEventListener('resize', resize)
+      window.removeEventListener('resize', applySize)
+      document.removeEventListener('fullscreenchange', onFullscreenChange)
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onVisibleRangeChange)
       chart.remove()
     }
@@ -303,6 +365,11 @@ export default function PatternAnalysis() {
       if (candles.length > 0) {
         allCandlesRef.current = candles
         candleSeriesRef.current!.setData(candles.map(toBar))
+        // A symbol/interval change loads a dataset with a completely
+        // different time span — without this, the chart keeps whatever
+        // zoom/pan range was visible before, which can point at empty space
+        // in the new data and make the chart look frozen/blank.
+        chartApiRef.current?.timeScale().fitContent()
         setLoadedCount(candles.length)
         if (candles.length < INITIAL_CANDLES) hasMoreRef.current = false
       } else {
@@ -340,6 +407,17 @@ export default function PatternAnalysis() {
 
   useEffect(() => { runScan() }, [symbol, interval])
 
+  // Pattern detail is a modal (double-click a row to open it) — Escape
+  // closes it, matching standard dialog behavior.
+  useEffect(() => {
+    if (!showDetailModal) return
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setShowDetailModal(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [showDetailModal])
+
   // Analysis tools (pure algorithmic, no auto-AI) rescan as more history
   // loads — debounced so scrolling doesn't fire a burst of network calls.
   // Pattern detection deliberately does NOT auto-rescan on scroll (it
@@ -353,7 +431,10 @@ export default function PatternAnalysis() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol, interval, enabledTools.join(','), scanLimit])
 
-  // Draw annotations — the selected pattern's + every enabled tool's, merged
+  // Draw annotations — every VISIBLE detected pattern (eye button controls
+  // this per-row) + every enabled tool's, all merged onto the chart at once.
+  // The currently-selected pattern (shown in the detail panel) is drawn with
+  // heavier lines so it's easy to spot among the rest.
   useEffect(() => {
     const chart = chartApiRef.current
     const candleSeries = candleSeriesRef.current
@@ -369,23 +450,38 @@ export default function PatternAnalysis() {
     const allRectangles: RectangleSpec[] = []
     const nowIso = new Date().toISOString()
 
-    if (selected) {
-      const a = selected.annotations
-      const bullish = selected.direction !== 'BEARISH'
+    const visiblePatterns = patterns.filter(p => !hiddenPatternIds.has(p.id))
+
+    // Priority rule: the SELECTED pattern gets its full read-out (trendlines +
+    // breakout/invalidation levels + SL/targets + text labels). Every other
+    // visible pattern gets only its structural shape (trendline + zone) — no
+    // price-line walls, no labels — so having many patterns visible at once
+    // doesn't bury the chart under dozens of overlapping price tags.
+    visiblePatterns.forEach(p => {
+      const a = p.annotations
+      const bullish = p.direction !== 'BEARISH'
+      const isSelected = p.id === selectedId
       drawTrendlines(chart, a, lineSeriesRef, tl =>
         tl.label.includes('resistance') ? '#ef4444' : tl.label.includes('support') ? '#22c55e' : '#818cf8')
-      drawLevels(candleSeries, a, priceLinesRef, bullish)
       allRectangles.push(...zonesToRectangles(a, nowIso))
-      if (selected.stop_loss) priceLinesRef.current.push(candleSeries.createPriceLine({
-        price: selected.stop_loss, color: '#ef4444', lineWidth: 1, lineStyle: 2, title: 'Stop Loss',
+
+      if (!isSelected) return
+
+      drawLevels(candleSeries, a, priceLinesRef, bullish, {
+        emphasize: true, titlePrefix: p.pattern_name,
+      })
+      if (p.stop_loss) priceLinesRef.current.push(candleSeries.createPriceLine({
+        price: p.stop_loss, color: '#ef4444', lineWidth: 2, lineStyle: 2,
+        title: `${p.pattern_name} Stop Loss`,
       }))
-      ;[selected.target_1, selected.target_2, selected.target_3].forEach((t, i) => {
+      ;[p.target_1, p.target_2, p.target_3].forEach((t, i) => {
         if (t) priceLinesRef.current.push(candleSeries.createPriceLine({
-          price: t, color: '#22c55e', lineWidth: 1, lineStyle: 2, title: `Target ${i + 1}`,
+          price: t, color: '#22c55e', lineWidth: 2, lineStyle: 2,
+          title: `${p.pattern_name} Target ${i + 1}`,
         }))
       })
       a.labels.forEach(l => allLabels.push({ ...l, bullish }))
-    }
+    })
 
     toolResults.forEach(tool => {
       if (tool.error) return
@@ -401,18 +497,50 @@ export default function PatternAnalysis() {
       color: l.bullish ? '#22c55e' : '#ef4444', shape: 'circle' as const, text: l.text,
     })))
     rectPrimitiveRef.current?.setRectangles(allRectangles)
-  }, [selected, toolResults])
+  }, [patterns, hiddenPatternIds, selectedId, toolResults])
 
   function submitSymbol() {
     const next = symbolInput.trim().toUpperCase()
     if (next) { setSymbolInput(next); setSymbol(next) }
   }
 
+  function toggleFullscreen() {
+    if (!chartWrapperRef.current) return
+    if (document.fullscreenElement) {
+      document.exitFullscreen()
+    } else {
+      chartWrapperRef.current.requestFullscreen()
+    }
+  }
+
+  function handlePatternRowClick(id: string) {
+    if (patternClickTimerRef.current) return // a dblclick is already pending
+    patternClickTimerRef.current = setTimeout(() => {
+      togglePatternVisibility(id)
+      patternClickTimerRef.current = null
+    }, PATTERN_CLICK_DELAY_MS)
+  }
+
+  function handlePatternRowDoubleClick(id: string) {
+    if (patternClickTimerRef.current) {
+      clearTimeout(patternClickTimerRef.current)
+      patternClickTimerRef.current = null
+    }
+    setSelectedId(id)
+    setShowDetailModal(true)
+  }
+
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-6 space-y-4">
+      {/* Header — identity + primary controls, kept slim so the chart below is the first big thing on screen */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-xl font-bold text-white">Pattern Analysis</h1>
+          <h1 className="text-xl font-bold text-white flex items-center gap-2">
+            Pattern Analysis
+            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-400 bg-green-500/10 border border-green-500/30 rounded-full px-2 py-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" /> LIVE
+            </span>
+          </h1>
           <p className="text-slate-500 text-sm">Automatic chart pattern detection, FVGs, Smart Money structure, and toggleable analysis tools — AI-explained</p>
         </div>
         <div className="flex items-center gap-2">
@@ -434,108 +562,192 @@ export default function PatternAnalysis() {
 
       {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm">{error}</div>}
 
-      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-4 space-y-3">
-        <p className="text-xs text-slate-500">Analysis tools — toggle individually, each with its own (ⓘ) documentation</p>
-        <ToolToggleBar enabled={enabledSet} onToggle={toggleTool} />
-      </div>
+      {/* Priority layout: the chart is the single dominant element (left,
+          widest column); everything secondary (patterns, tools, AI) lives in
+          a narrower sticky sidebar so it never outweighs the chart, and is
+          tabbed rather than stacked so the page doesn't turn into a long
+          scroll of equally-weighted sections. */}
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-4 items-start">
+        <div className="space-y-4 min-w-0">
+          <div ref={chartWrapperRef} className={`bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-4 ${isFullscreen ? 'flex flex-col' : ''}`}>
+            <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <p className="text-xs text-slate-500">{symbol} · {interval} — click a pattern once to hide it, double-click to view details</p>
+              <div className="flex items-center gap-3">
+                <p className="text-xs text-slate-600">
+                  {loadedCount.toLocaleString()} candles loaded
+                  {loadingOlder ? ' · loading older…' : historyExhausted ? ' · full history loaded' : ' · scroll left for more'}
+                  {' · analyzing ' + scanLimit.toLocaleString()}
+                  {' · '}{fvgCount} unfilled FVG{fvgCount === 1 ? '' : 's'}{toolsLoading ? ' · loading tools…' : ''}
+                </p>
+                <button onClick={toggleFullscreen}
+                  title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                  className="text-xs px-2 py-1 bg-[#0f1117] border border-[#2a2d3e] rounded-lg text-slate-400 hover:text-white hover:border-indigo-500/40">
+                  {isFullscreen ? '⤡ Exit Fullscreen' : '⤢ Fullscreen'}
+                </button>
+              </div>
+            </div>
+            <div ref={chartRef} className={isFullscreen ? 'flex-1' : ''} />
+          </div>
 
-      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-4">
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-          <p className="text-xs text-slate-500">{symbol} · {interval} — select a pattern below to draw it on the chart</p>
-          <p className="text-xs text-slate-600">
-            {loadedCount.toLocaleString()} candles loaded
-            {loadingOlder ? ' · loading older…' : historyExhausted ? ' · full history loaded' : ' · scroll left for more'}
-            {' · analyzing ' + scanLimit.toLocaleString()}
-            {' · '}{fvgCount} unfilled FVG{fvgCount === 1 ? '' : 's'}{toolsLoading ? ' · loading tools…' : ''}
-          </p>
+          <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-3">
+            <p className="text-xs text-slate-500 mb-2">Analysis tools — toggle individually, each with its own (ⓘ) documentation</p>
+            <ToolToggleBar enabled={enabledSet} onToggle={toggleTool} />
+          </div>
         </div>
-        <div ref={chartRef} />
-      </div>
 
-      {enabledTools.length > 0 && (
-        <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-4 space-y-3">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <h2 className="text-sm font-semibold text-slate-300">Tool Results</h2>
-            <button onClick={runAiExplain} disabled={aiLoading}
-              className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-medium rounded-lg">
-              {aiLoading ? 'Analyzing…' : 'AI Confluence Analysis'}
+        <div className="space-y-3 xl:sticky xl:top-6">
+          <div className="flex gap-1 bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-1">
+            <button onClick={() => setSidebarTab('patterns')}
+              className={`flex-1 text-xs font-semibold py-2 rounded-lg transition-colors ${
+                sidebarTab === 'patterns' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}>
+              Patterns ({patterns.length})
+            </button>
+            <button onClick={() => setSidebarTab('tools')}
+              className={`flex-1 text-xs font-semibold py-2 rounded-lg transition-colors ${
+                sidebarTab === 'tools' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+              }`}>
+              Tools & AI{enabledTools.length > 0 ? ` (${enabledTools.length})` : ''}
             </button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {toolResults.map(t => (
-              <div key={t.tool_key} className="bg-[#0f1117] rounded-lg p-3">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-white">{t.tool_name}</span>
-                  <span className={`text-xs font-bold flex items-center gap-1`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${DIR_DOT[t.bias]}`} />
-                    {t.bias}
-                  </span>
+
+          {sidebarTab === 'patterns' ? (
+            <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                <h2 className="text-sm font-semibold text-slate-300">
+                  Detected Patterns
+                  {hiddenPatternIds.size > 0 && <span className="text-slate-600"> · {hiddenPatternIds.size} hidden</span>}
+                </h2>
+                <div className="flex items-center gap-3">
+                  {hiddenPatternIds.size < patterns.length && patterns.length > 0 && (
+                    <button onClick={() => setHiddenPatternIds(new Set(patterns.map(p => p.id)))}
+                      className="text-xs text-indigo-400 hover:text-indigo-300">
+                      Hide all
+                    </button>
+                  )}
+                  {hiddenPatternIds.size > 0 && (
+                    <button onClick={() => setHiddenPatternIds(new Set())}
+                      className="text-xs text-indigo-400 hover:text-indigo-300">
+                      Show all
+                    </button>
+                  )}
                 </div>
-                <p className="text-xs text-slate-500">{t.error ? `Error: ${t.error}` : t.summary}</p>
               </div>
-            ))}
-          </div>
-
-          {aiError && <p className="text-xs text-red-400">{aiError}</p>}
-          {aiExplanation && !aiExplanation.error && (
-            <div className="border-t border-[#2a2d3e] pt-3 space-y-2">
-              <div className="flex items-center gap-3">
-                <span className="text-sm font-bold text-indigo-300">{aiExplanation.market_bias ?? 'N/A'}</span>
-                {aiExplanation.confidence_score !== undefined && (
-                  <span className="text-xs text-slate-500">Confidence: {aiExplanation.confidence_score.toFixed(0)}%</span>
-                )}
-                {aiExplanation.probability_of_success !== undefined && (
-                  <span className="text-xs text-slate-500">Probability: {aiExplanation.probability_of_success?.toFixed(0)}%</span>
-                )}
-              </div>
-              <p className="text-xs text-slate-400">{aiExplanation.reasoning}</p>
-              <p className="text-xs text-slate-400"><span className="text-slate-500 font-medium">Confluence: </span>{aiExplanation.confluence_notes}</p>
-              <p className="text-xs text-slate-400"><span className="text-slate-500 font-medium">Risk: </span>{aiExplanation.risk_analysis}</p>
-              <div className="flex gap-4 text-xs text-slate-400">
-                {aiExplanation.entry_suggestion && <span>Entry: ${aiExplanation.entry_suggestion.toFixed(2)}</span>}
-                {aiExplanation.stop_loss && <span className="text-red-400">SL: ${aiExplanation.stop_loss.toFixed(2)}</span>}
-                {aiExplanation.take_profit && <span className="text-green-400">TP: ${aiExplanation.take_profit.toFixed(2)}</span>}
-              </div>
+              {patterns.length === 0 ? (
+                <p className="text-slate-500 text-sm text-center py-6">
+                  {loading ? 'Scanning…' : 'No patterns detected on this timeframe right now.'}
+                </p>
+              ) : (
+                <div className="space-y-1 max-h-[65vh] overflow-y-auto">
+                  {sortedPatterns.map(p => {
+                    const hidden = hiddenPatternIds.has(p.id)
+                    return (
+                      <div key={p.id}
+                        onClick={() => handlePatternRowClick(p.id)}
+                        onDoubleClick={() => handlePatternRowDoubleClick(p.id)}
+                        title="Click to hide/show · double-click for details"
+                        className={`w-full flex items-center gap-1 rounded-lg text-sm transition-colors cursor-pointer select-none ${
+                          p.id === selectedId ? 'bg-indigo-500/20 border border-indigo-500/30' : 'hover:bg-[#0f1117] border border-transparent'
+                        }`}>
+                        <span className={`px-2 py-2 shrink-0 ${hidden ? 'text-slate-600' : 'text-indigo-400'}`}>
+                          {hidden ? '🙈' : '👁'}
+                        </span>
+                        <span className={`flex-1 text-left py-2 pr-3 flex items-center justify-between gap-2 ${hidden ? 'opacity-40' : ''}`}>
+                          <span className="flex items-center gap-2 min-w-0">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${DIR_DOT[p.direction]}`} />
+                            <span className="text-white truncate">{p.pattern_name}</span>
+                            {p.id === topPatternId && (
+                              <span className="shrink-0 text-[9px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-full px-1.5 py-0.5">
+                                TOP
+                              </span>
+                            )}
+                          </span>
+                          <span className="text-xs text-slate-500 shrink-0">{p.confidence.toFixed(0)}%</span>
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
-          )}
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-1 bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-4">
-          <h2 className="text-sm font-semibold text-slate-300 mb-3">
-            Detected Patterns ({patterns.length})
-          </h2>
-          {patterns.length === 0 ? (
-            <p className="text-slate-500 text-sm text-center py-6">
-              {loading ? 'Scanning…' : 'No patterns detected on this timeframe right now.'}
-            </p>
           ) : (
-            <div className="space-y-1 max-h-[480px] overflow-y-auto">
-              {patterns.map(p => (
-                <button key={p.id} onClick={() => setSelectedId(p.id)}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between transition-colors ${
-                    p.id === selectedId ? 'bg-indigo-500/20 border border-indigo-500/30' : 'hover:bg-[#0f1117] border border-transparent'
-                  }`}>
-                  <span className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${DIR_DOT[p.direction]}`} />
-                    <span className="text-white">{p.pattern_name}</span>
-                  </span>
-                  <span className="text-xs text-slate-500">{p.confidence.toFixed(0)}%</span>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+            <div className="space-y-3">
+              {enabledTools.length === 0 ? (
+                <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-6 text-center text-slate-500 text-sm">
+                  Toggle an analysis tool below the chart to see its results here.
+                </div>
+              ) : (
+                <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <h2 className="text-sm font-semibold text-slate-300">Tool Results</h2>
+                    <button onClick={runAiExplain} disabled={aiLoading}
+                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-medium rounded-lg">
+                      {aiLoading ? 'Analyzing…' : 'AI Confluence'}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2">
+                    {toolResults.map(t => (
+                      <div key={t.tool_key} className="bg-[#0f1117] rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-sm font-medium text-white">{t.tool_name}</span>
+                          <span className="text-xs font-bold flex items-center gap-1">
+                            <span className={`w-1.5 h-1.5 rounded-full ${DIR_DOT[t.bias]}`} />
+                            {t.bias}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500">{t.error ? `Error: ${t.error}` : t.summary}</p>
+                      </div>
+                    ))}
+                  </div>
 
-        <div className="lg:col-span-2">
-          {selected ? <PatternInfoPanel pattern={selected} aiLoading={patternAiLoading && !patternAiCache[selected.id]} /> : (
-            <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-8 text-center text-slate-500 text-sm">
-              Select a detected pattern to see its full analysis
+                  {aiError && <p className="text-xs text-red-400">{aiError}</p>}
+                  {aiExplanation && !aiExplanation.error && (
+                    <div className="border-t border-[#2a2d3e] pt-3 space-y-2">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-sm font-bold text-indigo-300">{aiExplanation.market_bias ?? 'N/A'}</span>
+                        {aiExplanation.confidence_score !== undefined && (
+                          <span className="text-xs text-slate-500">Confidence: {aiExplanation.confidence_score.toFixed(0)}%</span>
+                        )}
+                        {aiExplanation.probability_of_success !== undefined && (
+                          <span className="text-xs text-slate-500">Probability: {aiExplanation.probability_of_success?.toFixed(0)}%</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-400">{aiExplanation.reasoning}</p>
+                      <p className="text-xs text-slate-400"><span className="text-slate-500 font-medium">Confluence: </span>{aiExplanation.confluence_notes}</p>
+                      <p className="text-xs text-slate-400"><span className="text-slate-500 font-medium">Risk: </span>{aiExplanation.risk_analysis}</p>
+                      <div className="flex flex-col gap-1 text-xs text-slate-400">
+                        {aiExplanation.entry_suggestion && <span>Entry: ${aiExplanation.entry_suggestion.toFixed(2)}</span>}
+                        {aiExplanation.stop_loss && <span className="text-red-400">SL: ${aiExplanation.stop_loss.toFixed(2)}</span>}
+                        {aiExplanation.take_profit && <span className="text-green-400">TP: ${aiExplanation.take_profit.toFixed(2)}</span>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>
       </div>
+
+      {/* Pattern detail — a modal (opened by double-click) rather than a
+          permanently-reserved column, so the chart stays the widest, most
+          prominent element regardless of whether anything is selected. */}
+      {showDetailModal && selected && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setShowDetailModal(false)}
+        >
+          <div className="w-full max-w-2xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-end mb-2">
+              <button onClick={() => setShowDetailModal(false)}
+                className="text-xs text-slate-400 hover:text-white bg-[#1a1d27] border border-[#2a2d3e] rounded-lg px-2 py-1">
+                ✕ Close
+              </button>
+            </div>
+            <PatternInfoPanel pattern={selected} aiLoading={patternAiLoading && !patternAiCache[selected.id]} />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -573,7 +785,9 @@ function drawLevels(
   a: ChartAnnotations,
   ref: React.MutableRefObject<IPriceLine[]>,
   bullish: boolean,
+  opts: { emphasize?: boolean; titlePrefix?: string } = {},
 ) {
+  const prefix = opts.titlePrefix ? `${opts.titlePrefix} ` : ''
   a.levels.forEach(lv => {
     const isBreakout = lv.label === 'breakout_level'
     const isSupport = lv.label.startsWith('support')
@@ -584,12 +798,13 @@ function drawLevels(
       ? srLevelColor(isSupport, lv.strength!)
       : isBreakout ? (bullish ? '#22c55e' : '#ef4444') : '#f59e0b'
 
+    const width: 1 | 2 | 3 = isBreakout ? (opts.emphasize ? 3 : 2) : (opts.emphasize ? 2 : 1)
     ref.current.push(candleSeries.createPriceLine({
       price: lv.price,
       color,
-      lineWidth: isBreakout ? 2 : 1,
+      lineWidth: width,
       lineStyle: isBreakout ? 0 : 2,
-      title: lv.label.replace(/_/g, ' '),
+      title: `${prefix}${lv.label.replace(/_/g, ' ')}`,
     }))
   })
 }
