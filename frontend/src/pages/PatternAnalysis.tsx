@@ -287,10 +287,19 @@ export default function PatternAnalysis() {
       grid: { vertLines: { color: '#1a1d27' }, horzLines: { color: '#1a1d27' } },
       timeScale: { borderColor: '#2a2d3e' },
       rightPriceScale: { borderColor: '#2a2d3e' },
-      // Disable manual price-axis dragging — it lets autoScale get overridden
-      // into an arbitrary (including negative) range with no floor. Time-axis
-      // zoom/scroll (wheel + drag) stays enabled.
-      handleScale: { axisPressedMouseMove: { time: true, price: false } },
+      // Free zooming everywhere (wheel/pinch/drag on either axis). Getting
+      // "lost" is always one action from recovery: double-click either axis
+      // resets it (axisDoubleClickReset), the Reset view button restores
+      // auto-fit, and every symbol/interval load forces the price scale
+      // back to autoScale (see the load effect) — that last one is what
+      // fixes switching BTC (~61k) → ETH (~1.5k) leaving the view stuck at
+      // the old price range with the new candles off-screen.
+      handleScale: {
+        axisPressedMouseMove: { time: true, price: true },
+        axisDoubleClickReset: { time: true, price: true },
+        mouseWheel: true,
+        pinch: true,
+      },
       width: chartRef.current.clientWidth,
       height: 420,
     })
@@ -418,9 +427,16 @@ export default function PatternAnalysis() {
         allCandlesRef.current = candles
         candleSeriesRef.current!.setData(candles.map(toBar))
         // A symbol/interval change loads a dataset with a completely
-        // different time span — without this, the chart keeps whatever
-        // zoom/pan range was visible before, which can point at empty space
-        // in the new data and make the chart look frozen/blank.
+        // different time span AND price range — the chart instance is
+        // reused across switches, so both scales must be reset:
+        // - fitContent() re-fits the TIME axis (otherwise the view can
+        //   point at empty space and look frozen/blank);
+        // - autoScale:true re-fits the PRICE axis. Any manual price
+        //   zoom/drag puts the scale into manual mode permanently, so
+        //   switching BTC (~$61k) → ETH (~$1.5k) kept showing the $61k
+        //   range with ETH's candles far off-screen until the user
+        //   scrolled down and hunted for them.
+        chartApiRef.current?.priceScale('right').applyOptions({ autoScale: true })
         chartApiRef.current?.timeScale().fitContent()
         setLoadedCount(candles.length)
         if (candles.length < INITIAL_CANDLES) hasMoreRef.current = false
@@ -562,6 +578,14 @@ export default function PatternAnalysis() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patterns, hiddenPatternIds, selectedId, toolResults, minConfidence, showBroken])
 
+  function resetChartView() {
+    // One-click recovery from any zoom/pan state: price axis back to
+    // auto-fit, time axis back to the full loaded range (ends at the live
+    // candle) — same reset the symbol/interval load performs.
+    chartApiRef.current?.priceScale('right').applyOptions({ autoScale: true })
+    chartApiRef.current?.timeScale().fitContent()
+  }
+
   function toggleFullscreen() {
     if (!chartWrapperRef.current) return
     if (document.fullscreenElement) {
@@ -633,6 +657,11 @@ export default function PatternAnalysis() {
                   {' · analyzing ' + scanLimit.toLocaleString()}
                   {' · '}{fvgCount} unfilled FVG{fvgCount === 1 ? '' : 's'}{toolsLoading ? ' · loading tools…' : ''}
                 </p>
+                <button onClick={resetChartView}
+                  title="Snap back to the latest candles with an auto-fitted price axis (also: double-click either chart axis)"
+                  className="text-xs px-2 py-1 bg-[#0f1117] border border-[#2a2d3e] rounded-lg text-slate-400 hover:text-white hover:border-indigo-500/40">
+                  ⌖ Reset view
+                </button>
                 <button onClick={toggleFullscreen}
                   title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
                   className="text-xs px-2 py-1 bg-[#0f1117] border border-[#2a2d3e] rounded-lg text-slate-400 hover:text-white hover:border-indigo-500/40">

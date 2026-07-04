@@ -1522,6 +1522,35 @@ Three user requests, plus one real accounting bug found while verifying:
     #1 placed, MONITORING row appeared, and `/paper/orders` showed
     equity ≈ balance (10000.09, not the old phantom 10500).
 
+### Retail Dashboard chart — free zoom + price axis resets on symbol switch (2026-07-05)
+
+User: switching BTC (~$61k) → ETH (~$1.5k) kept the price axis at BTC's
+range, ETH's candles far off-screen — had to manually scroll/hunt for them.
+Root cause: the Retail Dashboard reuses ONE chart instance across symbol
+switches ("Chart setup — once" effect), and any manual price-axis
+zoom/drag puts lightweight-charts' price scale into MANUAL mode
+permanently; the old symbol-change handler reset only the TIME axis
+(`fitContent()`), never the price scale. (Dashboard.tsx doesn't have this
+bug — it recreates the whole chart per symbol, so its price scale is
+always fresh.)
+
+- Symbol/interval load now also runs
+  `priceScale('right').applyOptions({ autoScale: true })` — the view
+  always lands on the new coin's live price range.
+- Free zoom restored per the user's ask: `axisPressedMouseMove` re-enabled
+  for the price axis (was disabled in the earlier negative-axis fix) +
+  `axisDoubleClickReset` for both axes. Getting lost is always one action
+  from recovery: double-click an axis, the new "⌖ Reset view" button
+  (autoScale + fitContent), or just switching symbol. The
+  `autoscaleInfoProvider` ≥0 clamp still applies in autoScale mode, so the
+  negative-axis complaint stays fixed for the auto-fitted view; deliberate
+  manual drags below 0 are now recoverable rather than blocked.
+- Verified in headless Chrome reproducing the exact reported scenario:
+  dragged BTC's price axis into manual mode → switched to ETHUSDT → chart
+  immediately showed ETH at 1480-1920 with live price marked; then
+  wheel-zoomed + axis-dragged arbitrarily → one Reset-view click restored
+  the full auto-fitted view.
+
 ---
 
 ## Immediate Next Task
