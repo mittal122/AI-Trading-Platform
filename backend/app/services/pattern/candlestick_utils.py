@@ -114,6 +114,16 @@ def higher_volume(curr: CandleMetrics, prev: CandleMetrics) -> bool:
     return curr.volume > prev.volume * pattern_config.CANDLESTICK_VOLUME_MULTIPLIER
 
 
+def opens_within_body(prev: CandleMetrics, curr: CandleMetrics) -> bool:
+    """curr opens inside prev's real body — a genuine grinding advance/
+    decline, not a gap away from it. Used by Three White Soldiers/Black
+    Crows to exclude parabolic runs of same-colored candles that merely
+    close progressively higher/lower without actually building on each
+    other's range."""
+    lo, hi = min(prev.open, prev.close), max(prev.open, prev.close)
+    return lo <= curr.open <= hi
+
+
 def local_trend(df: pd.DataFrame, idx: int) -> str:
     """UP / DOWN / FLAT — least-squares slope of closes over a short local
     window ending at idx (not including idx itself, so the pattern's own

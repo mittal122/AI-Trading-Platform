@@ -1283,6 +1283,87 @@ separate feature, not a "chart shape").
   unrelated prose analogy in the Trend Line tool's help text ("similar to a
   rising/falling wedge"), left alone.
 
+### Candlestick pattern engine — full audit (2026-07-04, same day)
+
+User reported the new candlestick engine was producing many incorrect
+signals and asked for a full pattern-by-pattern audit: every one of the 32
+patterns checked individually against its official rules, dedicated pos/
+neg/edge tests per pattern, live backtest, before moving to the next.
+Done in 3 batches (single/two/three-candle), one at a time, per instruction.
+
+**7 root-cause bugs found, touching 15 of 32 patterns** (mirror pairs share
+one root cause):
+
+1. **Hammer/Hanging Man/Inverted Hammer/Shooting Star** — the "opposite
+   wick stays small" check used an ad-hoc `max(body, dominant_wick×0.3)`
+   formula; when body was large this became too permissive, accepting
+   candles with a visually significant opposite wick. Fixed: unified
+   `opposite_wick ≤ dominant_wick × CANDLESTICK_OPPOSITE_WICK_MAX_RATIO`
+   (new config constant, 0.3), applied identically to all 4 shapes.
+2. **Inside Bar** — two bugs: (a) built its `DetectedPattern` off the
+   *mother* candle instead of the current (baby) candle, so
+   `formation_end`/`current_price`/the chart label all landed one bar too
+   early with a stale price; (b) architecturally shadowed by the
+   single-candle shape checks ahead of it in the detection loop (Inside Bar
+   is a candle-*pair* relationship, not a shape of the current candle, so
+   "first match wins" incorrectly prevented it from ever firing whenever
+   the baby candle also had its own shape — a very common case). Fixed:
+   pass the baby candle to the builder; restructured the loop so Inside Bar
+   always runs independently.
+3. **Bullish/Bearish Engulfing** — missing explicit `C1 bearish AND C2
+   bullish` (or mirror) check. Body-overlap inequalities alone don't force
+   the right colors — two same-colored small candles sitting inside a
+   larger one could satisfy the math without being a real engulfing
+   pattern. Fixed: added the explicit color guard. Live BTCUSDT/1h/500
+   effect: bullish_engulfing count dropped from ~14 to 1–4.
+4. **Morning/Evening Star** — missing "C3 gaps up/down from C2," a
+   detection condition explicitly separate from the confirmation condition
+   in the source spec ("C3 closes strong into C1's body" ≠ "C3 gaps up").
+   Only the confirmation half had been implemented. Fixed: added the gap
+   check.
+5. **Bullish/Bearish Abandoned Baby** — could never actually fire. It's a
+   strictly rarer/stricter variant of Star (Doji middle + full gaps both
+   sides), so any genuine Abandoned Baby also satisfies Star's looser gap
+   rule — and Star was checked first, so it always won. Same "specific
+   pattern must be checked before the general one" rule already correctly
+   applied to Doji-before-Hammer in the single-candle detector, just missed
+   here. Fixed: reordered the three-candle check list.
+6. **Three White Soldiers/Black Crows** — missing "each candle opens within
+   the prior candle's real body." Without it, 3 same-colored candles that
+   merely closed progressively higher/lower while gapping wildly apart (a
+   parabolic run, not a genuine grinding advance) still qualified. Fixed:
+   new shared `opens_within_body()` helper in `candlestick_utils.py`.
+7. **Three Outside Up/Down** — same missing-color-check bug as #3; this
+   pattern's C1/C2 sub-shape duplicates the Engulfing overlap math but
+   hadn't independently received the earlier fix. Fixed: same color guard
+   added here too.
+
+**17 of 32 patterns verified correct with no changes** — including cases
+that could easily be mistaken for bugs but aren't: Bearish Kicker's
+breakout level is `C2.low` (not `C1.low` like the bullish side) and
+Harami/Tweezer correctly do NOT require certain color checks that
+Engulfing does — both match the source spec's literal, intentionally
+asymmetric wording.
+
+**New test files** (dedicated per-pattern pos/neg/edge suites, one per
+batch, 63 checks total, all passing): `tests/test_candlestick_single_candle_audit.py`,
+`tests/test_candlestick_two_candle_audit.py`, `tests/test_candlestick_three_candle_audit.py`.
+Existing `tests/test_candlestick_patterns.py` needed its Three White
+Soldiers synthetic candle updated (it gapped between candles — exactly the
+bug fix #6 now correctly rejects).
+
+**Refactor pass** (after all 32 verified): extracted `opens_within_body()`
+as a shared helper instead of duplicating it; removed dead
+`gapped_up`/`gapped_down` imports from `three_candle_patterns.py` (unused
+since the file's original build); confirmed zero unused imports remain
+across all 4 candlestick files via AST analysis.
+
+**Final verification**: all 63 new audit tests pass, full 47-file backend
+regression suite passes, live backtest on BTCUSDT/1h/500 candles (125
+patterns, 0 malformed, several spot-checked by hand against raw OHLC),
+live `GET /patterns/scan` endpoint verified after a backend restart (the
+usual gotcha — code changes need a manual uvicorn restart).
+
 ---
 
 ## Immediate Next Task

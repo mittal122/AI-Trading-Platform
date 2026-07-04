@@ -95,14 +95,20 @@ class TwoCandlePatternDetector(BasePatternDetector):
     # ------------------------------------------------------------------
 
     def _engulfing(self, df, c1, c2, symbol, interval, atr, swings, current_price, trend):
-        if trend == "DOWN" and higher_volume(c2, c1) and c2.close >= c1.open and c2.open <= c1.close:
+        # Body-overlap math alone doesn't force the right colors — e.g. two
+        # same-colored small candles sitting inside a larger one can satisfy
+        # the overlap inequalities without being an engulfing pattern at
+        # all. C1/C2 color is part of the definition, not implied by it.
+        if (trend == "DOWN" and c1.is_bearish and c2.is_bullish
+                and higher_volume(c2, c1) and c2.close >= c1.open and c2.open <= c1.close):
             geometry_fit = clamp(c2.body / max(c1.body, 1e-9) * 50)
             return self._build(
                 df, c1, c2, symbol, interval, "bullish_engulfing", "Bullish Engulfing",
                 PatternDirection.BULLISH, breakout_level=c2.high, stop_loss=c2.low,
                 atr=atr, swings=swings, current_price=current_price, geometry_fit=geometry_fit,
             )
-        if trend == "UP" and higher_volume(c2, c1) and c2.open >= c1.close and c2.close <= c1.open:
+        if (trend == "UP" and c1.is_bullish and c2.is_bearish
+                and higher_volume(c2, c1) and c2.open >= c1.close and c2.close <= c1.open):
             geometry_fit = clamp(c2.body / max(c1.body, 1e-9) * 50)
             return self._build(
                 df, c1, c2, symbol, interval, "bearish_engulfing", "Bearish Engulfing",

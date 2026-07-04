@@ -128,8 +128,8 @@ print(f"PASS: {p.pattern_name} — {p.direction}, status={p.status}")
 print("\n========== THREE-CANDLE: Three White Soldiers (trailing stop, no fixed target) ==========\n")
 df = _base_df(direction="DOWN")
 df = _append(df, o=90.0, h=93.3, l=89.8, c=93.0)
-df = _append(df, o=93.2, h=96.3, l=93.0, c=96.0)
-df = _append(df, o=96.2, h=99.3, l=96.0, c=99.0)
+df = _append(df, o=92.0, h=96.3, l=91.8, c=96.0)  # opens within C1's body [90,93]
+df = _append(df, o=94.0, h=99.3, l=93.8, c=99.0)  # opens within C2's body [92,96]
 results = ThreeCandlePatternDetector().detect(df, "TESTUSDT", "1h")
 p = _find(results, "three_white_soldiers")
 assert p.direction == PatternDirection.BULLISH

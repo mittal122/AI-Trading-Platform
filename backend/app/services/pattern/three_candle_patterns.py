@@ -7,7 +7,7 @@ from backend.app.schemas.pattern import (
 from backend.app.services.indicator_service import IndicatorService
 from backend.app.services.pattern.base_pattern_detector import BasePatternDetector
 from backend.app.services.pattern.candlestick_utils import (
-    CandleMetrics, candle_metrics, gapped_down, gapped_up, higher_volume, is_doji, local_trend,
+    CandleMetrics, candle_metrics, higher_volume, is_doji, local_trend, opens_within_body,
 )
 from backend.app.services.pattern.pattern_utils import (
     algorithmic_confidence, breakout_strength_score, clamp, make_pattern_id,
@@ -51,8 +51,15 @@ class ThreeCandlePatternDetector(BasePatternDetector):
         swings = self.swings.find_swings(window)
         current_price = float(window["close"].iloc[-1])
 
+        # Abandoned Baby is a strictly rarer, stricter variant of Star (Doji
+        # middle candle + full gaps on both sides) — any genuine Abandoned
+        # Baby ALSO satisfies Star's looser gap requirement. Must be checked
+        # FIRST, or Star always matches first and Abandoned Baby can never
+        # fire (same "specific before general" ordering rule as the
+        # Doji-family-before-Hammer-family priority in the single-candle
+        # detector).
         three_checks = [
-            self._star, self._abandoned_baby, self._soldiers_crows,
+            self._abandoned_baby, self._star, self._soldiers_crows,
             self._three_outside, self._three_inside,
         ]
 
@@ -94,8 +101,13 @@ class ThreeCandlePatternDetector(BasePatternDetector):
         cfg = pattern_config
         star_max = c1.body * cfg.CANDLESTICK_STAR_BODY_MAX_PCT / 100
 
-        if trend == "DOWN" and c1.is_bearish and c2.body <= star_max and max(c2.open, c2.close) < c1.close:
-            if c3.is_bullish and c3.close > c1.midpoint:
+        if (trend == "DOWN" and c1.is_bearish and c2.body <= star_max
+                and max(c2.open, c2.close) < c1.close):
+            # C3 must also gap UP from the star (C2) — a required detection
+            # condition on its own, separate from "closes into C1's body"
+            # (the confirmation). Missing this let a C3 that merely overlaps
+            # C2's body still count as a Morning Star.
+            if c3.is_bullish and min(c3.open, c3.close) > max(c2.open, c2.close) and c3.close > c1.midpoint:
                 geometry_fit = clamp((c3.close - c1.midpoint) / max(c1.body, 1e-9) * 60)
                 return self._build(
                     df, c1, c3, symbol, interval, "morning_star", "Morning Star",
@@ -103,8 +115,10 @@ class ThreeCandlePatternDetector(BasePatternDetector):
                     atr=atr, swings=swings, current_price=current_price, geometry_fit=geometry_fit,
                 )
 
-        if trend == "UP" and c1.is_bullish and c2.body <= star_max and min(c2.open, c2.close) > c1.close:
-            if c3.is_bearish and c3.close < c1.midpoint:
+        if (trend == "UP" and c1.is_bullish and c2.body <= star_max
+                and min(c2.open, c2.close) > c1.close):
+            # C3 must gap DOWN from the star (mirror of the check above).
+            if c3.is_bearish and max(c3.open, c3.close) < min(c2.open, c2.close) and c3.close < c1.midpoint:
                 geometry_fit = clamp((c1.midpoint - c3.close) / max(c1.body, 1e-9) * 60)
                 return self._build(
                     df, c1, c3, symbol, interval, "evening_star", "Evening Star",
@@ -142,7 +156,15 @@ class ThreeCandlePatternDetector(BasePatternDetector):
     def _soldiers_crows(self, df, c1, c2, c3, symbol, interval, atr, swings, current_price, trend):
         min_body = atr * pattern_config.CANDLESTICK_SOLDIER_CROW_MIN_ATR_MULT
 
+        # Each candle should open within the prior candle's real body — a
+        # genuine grinding advance/decline, not 3 candles that merely close
+        # higher/lower while gapping wildly apart from each other (which
+        # real technical-analysis definitions of "soldiers"/"crows"
+        # explicitly exclude).
+        opens_within_prior_body = opens_within_body(c1, c2) and opens_within_body(c2, c3)
+
         if (trend == "DOWN" and c1.is_bullish and c2.is_bullish and c3.is_bullish
+                and opens_within_prior_body
                 and min(c1.body, c2.body, c3.body) >= min_body and c3.close > c2.close > c1.close):
             return self._build(
                 df, c1, c3, symbol, interval, "three_white_soldiers", "Three White Soldiers",
@@ -151,6 +173,7 @@ class ThreeCandlePatternDetector(BasePatternDetector):
                 no_fixed_target=True,
             )
         if (trend == "UP" and c1.is_bearish and c2.is_bearish and c3.is_bearish
+                and opens_within_prior_body
                 and min(c1.body, c2.body, c3.body) >= min_body and c3.close < c2.close < c1.close):
             return self._build(
                 df, c1, c3, symbol, interval, "three_black_crows", "Three Black Crows",
@@ -187,14 +210,18 @@ class ThreeCandlePatternDetector(BasePatternDetector):
     # ------------------------------------------------------------------
 
     def _three_outside(self, df, c1, c2, c3, symbol, interval, atr, swings, current_price, trend):
-        if (trend == "DOWN" and c2.close >= c1.open and c2.open <= c1.close
+        # Same fix as the 2-candle Bullish/Bearish Engulfing: body-overlap
+        # math alone doesn't force the right colors on C1/C2.
+        if (trend == "DOWN" and c1.is_bearish and c2.is_bullish
+                and c2.close >= c1.open and c2.open <= c1.close
                 and c3.close > c2.close and higher_volume(c3, c1)):
             return self._build(
                 df, c1, c3, symbol, interval, "three_outside_up", "Three Outside Up",
                 PatternDirection.BULLISH, breakout_level=c2.close, stop_loss=c2.low,
                 atr=atr, swings=swings, current_price=current_price, geometry_fit=75.0, rr_override=1.5,
             )
-        if (trend == "UP" and c2.open >= c1.close and c2.close <= c1.open and c3.close < c2.close):
+        if (trend == "UP" and c1.is_bullish and c2.is_bearish
+                and c2.open >= c1.close and c2.close <= c1.open and c3.close < c2.close):
             return self._build(
                 df, c1, c3, symbol, interval, "three_outside_down", "Three Outside Down",
                 PatternDirection.BEARISH, breakout_level=c2.close, stop_loss=c2.high,

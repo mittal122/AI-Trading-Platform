@@ -33,6 +33,11 @@ class PatternConfig:
     CANDLESTICK_DOJI_BODY_MAX_PCT = 5.0         # Doji family: max body as % of total range
     CANDLESTICK_LONG_WICK_MIN_PCT = 90.0        # Dragonfly/Gravestone: min opposite wick as % of range
     CANDLESTICK_WICK_TO_BODY_RATIO = 2.0        # Hammer/Hanging Man/Inverted Hammer/Shooting Star/Spinning Top
+    # Hammer family only: the SHORT wick must stay small relative to the
+    # DOMINANT wick (not an ad-hoc mix of body/dominant-wick fractions) —
+    # standard screening convention is "opposite shadow under ~30-38% of the
+    # main shadow." Single clean ratio, applied uniformly to all 4 shapes.
+    CANDLESTICK_OPPOSITE_WICK_MAX_RATIO = 0.3
     CANDLESTICK_MIDPOINT_THRESHOLD = 0.5        # Piercing Line / Dark Cloud Cover
     CANDLESTICK_EQUAL_LEVEL_TOLERANCE_PCT = 0.15  # Tweezer Top/Bottom "same" high/low
     CANDLESTICK_GAP_MIN_PCT = 0.05              # Kickers: min % gap between C1 and C2

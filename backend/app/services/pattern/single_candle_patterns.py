@@ -65,29 +65,26 @@ class SingleCandlePatternDetector(BasePatternDetector):
                 continue
             trend = local_trend(window, idx)
 
+            # A candle's own shape (Marubozu/Doji/Hammer-family/Spinning Top)
+            # is mutually exclusive — one candle can't be two shapes at once,
+            # so first match wins within this group.
             p = self._marubozu(window, m, symbol, interval, atr, swings, current_price)
+            if p is None:
+                p = self._doji_family(window, m, symbol, interval, atr, swings, current_price, trend)
+            if p is None:
+                p = self._hammer_family(window, m, symbol, interval, atr, swings, current_price, trend)
+            if p is None:
+                p = self._spinning_top(window, m, symbol, interval, atr)
             if p:
                 patterns.append(p)
-                continue  # a candle is one shape at a time — first match wins
 
-            p = self._doji_family(window, m, symbol, interval, atr, swings, current_price, trend)
-            if p:
-                patterns.append(p)
-                continue
-
-            p = self._hammer_family(window, m, symbol, interval, atr, swings, current_price, trend)
-            if p:
-                patterns.append(p)
-                continue
-
-            p = self._spinning_top(window, m, symbol, interval, atr)
-            if p:
-                patterns.append(p)
-                continue
-
-            p = self._inside_bar(window, idx, m, symbol, interval, atr)
-            if p:
-                patterns.append(p)
+            # Inside Bar is a candle-PAIR relationship (containment vs. the
+            # prior candle), completely independent of the current candle's
+            # own shape — a candle can genuinely be both a Doji AND an Inside
+            # Bar at once. Must NOT be shadowed by the shape checks above.
+            p_inside = self._inside_bar(window, idx, m, symbol, interval, atr)
+            if p_inside:
+                patterns.append(p_inside)
 
         return patterns
 
@@ -144,8 +141,9 @@ class SingleCandlePatternDetector(BasePatternDetector):
     # ------------------------------------------------------------------
 
     def _hammer_family(self, df, m: CandleMetrics, symbol, interval, atr, swings, current_price, trend):
-        lower_dominant = wick_at_least(m.lower_wick, m.body) and m.upper_wick <= max(m.body, m.lower_wick * 0.3)
-        upper_dominant = wick_at_least(m.upper_wick, m.body) and m.lower_wick <= max(m.body, m.upper_wick * 0.3)
+        opp_ratio = pattern_config.CANDLESTICK_OPPOSITE_WICK_MAX_RATIO
+        lower_dominant = wick_at_least(m.lower_wick, m.body) and m.upper_wick <= m.lower_wick * opp_ratio
+        upper_dominant = wick_at_least(m.upper_wick, m.body) and m.lower_wick <= m.upper_wick * opp_ratio
 
         if lower_dominant and trend == "DOWN":
             geometry_fit = clamp(m.lower_wick / max(m.body, m.total_range * 0.01) * 25)
@@ -190,8 +188,13 @@ class SingleCandlePatternDetector(BasePatternDetector):
     def _inside_bar(self, df, idx, m: CandleMetrics, symbol, interval, atr):
         mother = candle_metrics(df, idx - 1)
         if mother.high > m.high and mother.low < m.low:
+            # Pass the BABY (m, the current candle) — not the mother — so
+            # formation_end/current_price/the chart label all land on the
+            # candle where containment is actually confirmed, not one bar
+            # too early. formation_start is overridden to the mother's
+            # timestamp so the pattern's full span is still represented.
             return self._build_neutral(
-                mother, symbol, interval, "inside_bar", "Inside Bar", mother.low, mother.high,
+                m, symbol, interval, "inside_bar", "Inside Bar", mother.low, mother.high,
                 formation_start_override=mother.timestamp,
             )
         return None
