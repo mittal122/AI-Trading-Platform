@@ -276,13 +276,27 @@ export default function PaperTrade() {
         </div>
       </div>
 
-      {/* Config */}
-      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+      {/* Strategy auto-bot — the server-side engine that trades a strategy's
+          signals automatically on every closed candle */}
+      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-300">Strategy Auto-Bot</h2>
+          <p className="text-xs text-slate-500 mt-1">
+            Watches every closed candle of the chosen symbol/interval with the selected strategy.
+            When the strategy fires a BUY signal, it opens a virtual position automatically, then
+            manages it hands-free (stop-loss, take-profit, trailing stop, partial exits) until close.
+            Runs on the server — it keeps trading even if you close this page.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div>
             <label className="text-xs text-slate-500 mb-1 block">Symbol</label>
-            <input value={symbol} onChange={e => setSymbol(e.target.value)} disabled={status?.is_running}
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none disabled:opacity-50" />
+            {status?.is_running ? (
+              <input value={symbol} disabled
+                className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none opacity-50" />
+            ) : (
+              <SymbolSearchInput value={symbol} onCommit={setSymbol} />
+            )}
           </div>
           <div>
             <label className="text-xs text-slate-500 mb-1 block">Strategy</label>
@@ -331,6 +345,13 @@ export default function PaperTrade() {
             <span className="text-sm font-medium">
               {status.is_running ? `Running — ${status.symbol} ${status.interval} · ${status.strategy}` : 'Stopped (engine keeps its state — restart anytime)'}
             </span>
+            {status.is_running && (
+              <span className="text-xs text-slate-500">
+                {status.candles_processed} candle{status.candles_processed === 1 ? '' : 's'} analyzed
+                {status.last_price ? ` · last price $${status.last_price.toLocaleString()}` : ''}
+                {status.candles_processed === 0 ? ' — waiting for the first candle to close…' : ''}
+              </span>
+            )}
             {status.last_signal && (
               <span className={`ml-auto text-xs font-bold px-2 py-0.5 rounded ${
                 status.last_signal === 'BUY' ? 'bg-green-500/20 text-green-400' :
