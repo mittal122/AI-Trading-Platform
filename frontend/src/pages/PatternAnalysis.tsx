@@ -32,6 +32,9 @@ const MAX_SCAN_LIMIT = 1000
 // Analysis tools (no auto-AI) rescan as more history loads, but debounced —
 // don't fire a network call on every single scroll tick.
 const TOOL_RESCAN_DEBOUNCE_MS = 1200
+// Periodic pattern re-detection cadence — keeps detections current as new
+// candles close, without hammering the backend (scan is algorithmic-only).
+const AUTO_RESCAN_MS = 60_000
 // Window to disambiguate a single click (hide/show) from a double click
 // (select for detail) on a pattern row.
 const PATTERN_CLICK_DELAY_MS = 220
@@ -43,6 +46,15 @@ const LIVE_POLL_MS = 5000
 
 const DIR_DOT: Record<string, string> = {
   BULLISH: 'bg-green-400', BEARISH: 'bg-red-400', NEUTRAL: 'bg-slate-400',
+}
+
+// Beginner-readable status wording — CONFIRMED means "the pattern triggered
+// (price actually broke out afterwards)", DEVELOPING means "still open at
+// the live edge", BROKEN means "failed or expired without triggering".
+const STATUS_CHIP: Record<string, { label: string; cls: string }> = {
+  CONFIRMED:  { label: '✓ Confirmed', cls: 'text-green-400 bg-green-500/10 border-green-500/30' },
+  DEVELOPING: { label: '… Forming',   cls: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30' },
+  BROKEN:     { label: '✕ Failed',    cls: 'text-red-400/80 bg-red-500/10 border-red-500/30' },
 }
 
 const TOOL_LINE_COLORS: Record<string, string> = {
@@ -74,6 +86,10 @@ export default function PatternAnalysis() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  // Display quality gate — defaults tuned for a clean chart: only
+  // high-confidence patterns, and failed/expired (BROKEN) setups hidden.
+  const [minConfidence, setMinConfidence] = usePersistedState('patterns.minConf', 70)
+  const [showBroken, setShowBroken] = usePersistedState('patterns.showBroken', false)
   // Every detected pattern is drawn on the chart by default — the eye button
   // per row opts a specific one OUT (hides it), rather than an opt-in list,
   // so newly-found patterns from a rescan show up without extra clicks.
@@ -150,8 +166,14 @@ export default function PatternAnalysis() {
     (latest, t) => (!latest || t.last_updated > latest ? t.last_updated : latest), null,
   )
   const scanLimit = Math.min(Math.max(loadedCount, INITIAL_CANDLES), MAX_SCAN_LIMIT)
+  // Quality gate for what's SHOWN (list + chart): the backend returns every
+  // pattern above its own floor, but by default only high-confidence,
+  // non-failed setups are displayed — the raw firehose was unreadable
+  // (a label on nearly every candle). The user can loosen these.
+  const filteredPatterns = patterns.filter(p =>
+    p.confidence >= minConfidence && (showBroken || p.status !== 'BROKEN'))
   // Highest-confidence pattern first — the list's own priority ranking.
-  const sortedPatterns = [...patterns].sort((a, b) => b.confidence - a.confidence)
+  const sortedPatterns = [...filteredPatterns].sort((a, b) => b.confidence - a.confidence)
   const topPatternId = sortedPatterns[0]?.id ?? null
 
   async function fetchCandlesCached(sym: string, itv: string, limit: number, endTime?: number): Promise<Candle[]> {
@@ -168,9 +190,18 @@ export default function PatternAnalysis() {
     setLoading(true); setError(''); setAiExplanation(null)
     try {
       const res = await scanPatterns(symbol, interval, scanLimit)
-      setPatterns(res.data.patterns)
+      const fresh = res.data.patterns
+      setPatterns(fresh)
       setFvgCount(res.data.fvgs.filter(f => !f.filled).length)
-      setSelectedId(res.data.patterns[0]?.id ?? null)
+      // Keep the user's current selection across rescans (auto-rescan runs
+      // every minute — yanking the selection away mid-read would be hostile);
+      // only when it's gone does the top displayable pattern get selected.
+      setSelectedId(prev => {
+        if (prev && fresh.some(p => p.id === prev)) return prev
+        const displayable = fresh.filter(p =>
+          p.confidence >= minConfidence && (showBroken || p.status !== 'BROKEN'))
+        return displayable.sort((a, b) => b.confidence - a.confidence)[0]?.id ?? null
+      })
       if (res.data.error) setError(res.data.error)
     } catch (e: any) {
       setError(e?.response?.data?.detail ?? 'Pattern scan failed')
@@ -428,6 +459,15 @@ export default function PatternAnalysis() {
 
   useEffect(() => { runScan() }, [symbol, interval])
 
+  // Real-time: re-detect on a steady cadence so fresh candles get scanned
+  // without a manual Rescan click. Algorithmic-only (no AI calls), so a
+  // periodic scan is cheap (~2-4s server-side).
+  useEffect(() => {
+    const id = window.setInterval(() => { runScan() }, AUTO_RESCAN_MS)
+    return () => window.clearInterval(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [symbol, interval, scanLimit])
+
   // Pattern detail is a modal (double-click a row to open it) — Escape
   // closes it, matching standard dialog behavior.
   useEffect(() => {
@@ -471,16 +511,14 @@ export default function PatternAnalysis() {
     const allRectangles: RectangleSpec[] = []
     const nowIso = new Date().toISOString()
 
-    const visiblePatterns = patterns.filter(p => !hiddenPatternIds.has(p.id))
+    const visiblePatterns = filteredPatterns.filter(p => !hiddenPatternIds.has(p.id))
 
-    // Priority rule: EVERY visible pattern always gets its text label marker
-    // on the chart — candlestick patterns are a single point in time, so
-    // without a label there's nothing to see at all for a non-selected one
-    // (unlike chart-shape patterns' trendlines/zones, which still show
-    // structure on their own). The SELECTED pattern additionally gets the
-    // full read-out: breakout/invalidation levels + SL/targets as price
-    // lines — kept selected-only so many visible patterns don't bury the
-    // chart under dozens of overlapping horizontal lines.
+    // Priority rule: every visible pattern is DRAWN via its formation zone
+    // (a filled, direction-colored box around the exact candles that form
+    // it, with the pattern name at the box corner — see formation_zone()
+    // backend-side). Text markers + the full price-line read-out
+    // (breakout/invalidation/SL/targets) are selected-only, so many visible
+    // patterns can't bury the chart under overlapping text again.
     visiblePatterns.forEach(p => {
       const a = p.annotations
       const bullish = p.direction !== 'BEARISH'
@@ -488,9 +526,9 @@ export default function PatternAnalysis() {
       drawTrendlines(chart, a, lineSeriesRef, tl =>
         tl.label.includes('resistance') ? '#ef4444' : tl.label.includes('support') ? '#22c55e' : '#818cf8')
       allRectangles.push(...zonesToRectangles(a, nowIso))
-      a.labels.forEach(l => allLabels.push({ ...l, bullish }))
 
       if (!isSelected) return
+      a.labels.forEach(l => allLabels.push({ ...l, bullish }))
 
       drawLevels(candleSeries, a, priceLinesRef, bullish, {
         emphasize: true, titlePrefix: p.pattern_name,
@@ -521,7 +559,8 @@ export default function PatternAnalysis() {
       color: l.bullish ? '#22c55e' : '#ef4444', shape: 'circle' as const, text: l.text,
     })))
     rectPrimitiveRef.current?.setRectangles(allRectangles)
-  }, [patterns, hiddenPatternIds, selectedId, toolResults])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patterns, hiddenPatternIds, selectedId, toolResults, minConfidence, showBroken])
 
   function toggleFullscreen() {
     if (!chartWrapperRef.current) return
@@ -638,7 +677,7 @@ export default function PatternAnalysis() {
               className={`flex-1 text-xs font-semibold py-2 rounded-lg transition-colors ${
                 sidebarTab === 'patterns' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
               }`}>
-              Patterns ({patterns.length})
+              Patterns ({filteredPatterns.length})
             </button>
             <button onClick={() => setSidebarTab('tools')}
               className={`flex-1 text-xs font-semibold py-2 rounded-lg transition-colors ${
@@ -650,14 +689,14 @@ export default function PatternAnalysis() {
 
           {sidebarTab === 'patterns' ? (
             <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+              <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
                 <h2 className="text-sm font-semibold text-slate-300">
                   Detected Patterns
                   {hiddenPatternIds.size > 0 && <span className="text-slate-600"> · {hiddenPatternIds.size} hidden</span>}
                 </h2>
                 <div className="flex items-center gap-3">
-                  {hiddenPatternIds.size < patterns.length && patterns.length > 0 && (
-                    <button onClick={() => setHiddenPatternIds(new Set(patterns.map(p => p.id)))}
+                  {hiddenPatternIds.size < filteredPatterns.length && filteredPatterns.length > 0 && (
+                    <button onClick={() => setHiddenPatternIds(new Set(filteredPatterns.map(p => p.id)))}
                       className="text-xs text-indigo-400 hover:text-indigo-300">
                       Hide all
                     </button>
@@ -670,9 +709,33 @@ export default function PatternAnalysis() {
                   )}
                 </div>
               </div>
-              {patterns.length === 0 ? (
+
+              {/* Quality filters — what counts as worth showing */}
+              <div className="flex items-center gap-3 mb-3 flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-slate-500">Min conf.</span>
+                  <input type="range" min={55} max={90} step={5} value={minConfidence}
+                    onChange={e => setMinConfidence(Number(e.target.value))} className="w-20" />
+                  <span className="text-[11px] text-slate-400 w-7">{minConfidence}%</span>
+                </div>
+                <button onClick={() => setShowBroken(!showBroken)}
+                  className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${
+                    showBroken
+                      ? 'bg-red-500/10 text-red-400 border-red-500/30'
+                      : 'bg-[#0f1117] text-slate-500 border-[#2a2d3e]'
+                  }`}>
+                  {showBroken ? 'Failed shown' : 'Failed hidden'}
+                </button>
+                <span className="text-[11px] text-slate-600">
+                  {filteredPatterns.length} of {patterns.length}
+                </span>
+              </div>
+
+              {filteredPatterns.length === 0 ? (
                 <p className="text-slate-500 text-sm text-center py-6">
-                  {loading ? 'Scanning…' : 'No patterns detected on this timeframe right now.'}
+                  {loading ? 'Scanning…'
+                    : patterns.length > 0 ? 'No patterns pass the current filters — lower Min conf. to see weaker matches.'
+                    : 'No patterns detected on this timeframe right now.'}
                 </p>
               ) : (
                 <div className="space-y-1 max-h-[65vh] overflow-y-auto">
@@ -699,7 +762,12 @@ export default function PatternAnalysis() {
                               </span>
                             )}
                           </span>
-                          <span className="text-xs text-slate-500 shrink-0">{p.confidence.toFixed(0)}%</span>
+                          <span className="flex items-center gap-2 shrink-0">
+                            <span className={`text-[9px] font-semibold border rounded-full px-1.5 py-0.5 ${STATUS_CHIP[p.status]?.cls ?? ''}`}>
+                              {STATUS_CHIP[p.status]?.label ?? p.status}
+                            </span>
+                            <span className="text-xs text-slate-500">{p.confidence.toFixed(0)}%</span>
+                          </span>
                         </span>
                       </div>
                     )

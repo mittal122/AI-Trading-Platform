@@ -1421,6 +1421,68 @@ and was fully wired backend-side (`binance_provider.py:get_symbols()` →
   `ETHUSDT`, etc.) for query "ETH". Frontend `tsc --noEmit` clean
   throughout. No backend changes were needed for any of this.
 
+### Pattern detection overhaul — full-chart scan, honest statuses, drawn patterns, noise control (2026-07-05)
+
+User (with screenshot): patterns messy/unpredictable — text label on nearly
+every candle (~80-125 shown), no actual drawings, only a slice of the chart
+scanned, statuses not trustworthy. Five distinct root causes found and fixed:
+
+1. **Scan window**: `CANDLESTICK_LOOKBACK_BARS` was 150 of the 1000 loaded
+   candles — most of the chart genuinely had no detections. Now 1000 (the
+   per-request ceiling); verified detections span index 22→998. Full
+   3-detector scan over 1000 candles is ~2s.
+2. **Status was computed against TODAY's price** for every pattern —
+   meaningless for one formed 900 bars ago (effectively random
+   CONFIRMED/BROKEN). New `resolve_forward_status()` in
+   `candlestick_utils.py`: walks the candles AFTER the pattern; first level
+   touched decides (invalidation checked before breakout within the same
+   bar — pessimistic read); unresolved inside the
+   `CANDLESTICK_CONFIRMATION_WINDOW_BARS=12` window at the live edge →
+   DEVELOPING; expired without triggering → BROKEN (no longer tradeable).
+   Confidence's breakout-strength component now derives from this resolved
+   outcome (`STATUS_STRENGTH_SCORE`) instead of distance-to-current-price.
+   `status_from_breakout()` (current-price-based) still exists for SMC.
+3. **No noise floor**: tiny chop candles trivially satisfy shape ratios (a
+   2-tick candle is a "perfect doji"). New gates:
+   `CANDLESTICK_MIN_RANGE_ATR_RATIO=0.6` (signal candle vs ATR; for 2/3-
+   candle patterns the formation's largest candle), neutral patterns
+   (Doji/Spinning Top/Inside Bar) need `1.2` (Inside Bar's gate is on the
+   MOTHER — the baby is small by definition), and Tweezer "equal highs/lows"
+   tolerance is now ATR-based (`CANDLESTICK_TWEEZER_EQUAL_ATR_RATIO=0.2`)
+   instead of %-of-price (0.15% of price ≈ a full ATR on intraday BTC —
+   231 tweezers in one scan; now ~53). `PATTERN_SCAN_MIN_CONFIDENCE` 40→55.
+4. **Patterns are now DRAWN**: `formation_zone()` emits a `ZoneAnnotation`
+   rectangle spanning the exact candles that form each pattern
+   (direction-colored box + name), rendered by the already-existing
+   `RectanglesPrimitive` (same machinery as FVG zones). The right edge
+   extends one bar past the last formation candle so single-candle patterns
+   have visible width. `rectanglePrimitive.ts` only draws the name once the
+   box is ≥40px wide — zoomed out you see clean colored boxes, zoom in and
+   names appear (otherwise 60 boxes × names recreates the text soup).
+5. **Display filtering** (`PatternAnalysis.tsx`): new persisted Min-conf
+   slider (default 70) + "Failed hidden" toggle (BROKEN patterns hidden by
+   default); "N of M" count shows what's filtered. Chart text markers +
+   price-line read-out are selected-only again (zones carry the visual for
+   everything else). List rows show a status chip (✓ Confirmed / … Forming /
+   ✕ Failed — beginner-readable wording). Rescans preserve the user's
+   current selection (auto-rescan otherwise yanked it every minute).
+   Auto-rescan every 60s (`AUTO_RESCAN_MS`) — algorithmic-only, so cheap.
+6. **Pattern Dashboard recency filter**: with the full-history scan +
+   honest statuses, a pattern CONFIRMED 900 bars ago would flood the
+   confirmed-only dashboard with stale rows. `PatternScanner.dashboard()`
+   now keeps only patterns completed within
+   `PATTERN_DASHBOARD_RECENT_BARS=20` bars of their own interval (via
+   `interval_to_minutes`); the chart page's full-history scan is unaffected.
+   Measured: 18 recent rows vs. hundreds.
+
+Measured effect on BTCUSDT/15m/1000: raw candidates 611 → 382 returned
+(post-gates + conf≥55) → ~31-60 displayed at the default 70% filter, all
+with real drawn boxes, spanning the whole chart. Verified in headless
+Chrome zoomed out (clean, zero text soup) and zoomed in (box + name visible
+around the exact formation candles). All 3 audit suites (70 checks) + full
+47-file suite pass; `tsc --noEmit` clean. Tests now reference
+`pattern_config.PATTERN_SCAN_MIN_CONFIDENCE` instead of a hardcoded 40.
+
 ---
 
 ## Immediate Next Task

@@ -8,12 +8,12 @@ from backend.app.schemas.pattern import (
 from backend.app.services.indicator_service import IndicatorService
 from backend.app.services.pattern.base_pattern_detector import BasePatternDetector
 from backend.app.services.pattern.candlestick_utils import (
-    CandleMetrics, candle_metrics, is_doji, is_long_lower_wick, is_long_upper_wick,
-    is_marubozu, local_trend, wick_at_least,
+    STATUS_STRENGTH_SCORE, CandleMetrics, candle_metrics, formation_zone, is_doji,
+    is_long_lower_wick, is_long_upper_wick, is_marubozu, local_trend,
+    resolve_forward_status, wick_at_least,
 )
 from backend.app.services.pattern.pattern_utils import (
-    algorithmic_confidence, breakout_strength_score, clamp, make_pattern_id,
-    nearest_swing_target, now_iso, risk_reward, status_from_breakout,
+    algorithmic_confidence, clamp, make_pattern_id, nearest_swing_target, now_iso, risk_reward,
 )
 from backend.app.services.pattern.swing_detector import SwingDetector
 
@@ -58,6 +58,7 @@ class SingleCandlePatternDetector(BasePatternDetector):
         current_price = float(window["close"].iloc[-1])
 
         patterns: list[DetectedPattern] = []
+        min_range = atr * cfg.CANDLESTICK_MIN_RANGE_ATR_RATIO
         start = max(1, cfg.CANDLESTICK_TREND_LOOKBACK_BARS)
         for idx in range(start, wn):
             m = candle_metrics(window, idx)
@@ -65,18 +66,25 @@ class SingleCandlePatternDetector(BasePatternDetector):
                 continue
             trend = local_trend(window, idx)
 
-            # A candle's own shape (Marubozu/Doji/Hammer-family/Spinning Top)
-            # is mutually exclusive — one candle can't be two shapes at once,
-            # so first match wins within this group.
-            p = self._marubozu(window, m, symbol, interval, atr, swings, current_price)
-            if p is None:
-                p = self._doji_family(window, m, symbol, interval, atr, swings, current_price, trend)
-            if p is None:
-                p = self._hammer_family(window, m, symbol, interval, atr, swings, current_price, trend)
-            if p is None:
-                p = self._spinning_top(window, m, symbol, interval, atr)
-            if p:
-                patterns.append(p)
+            # Noise floor: a candle much smaller than recent volatility
+            # trivially satisfies shape ratios (a 2-tick candle is a
+            # "perfect" doji/spinning top) — those flooded the results with
+            # meaningless matches on every chop bar. Shape checks only run
+            # on candles of real size; Inside Bar is exempt (its baby candle
+            # is small BY DEFINITION — its own gate is on the mother below).
+            if m.total_range >= min_range:
+                # A candle's own shape (Marubozu/Doji/Hammer-family/Spinning
+                # Top) is mutually exclusive — one candle can't be two shapes
+                # at once, so first match wins within this group.
+                p = self._marubozu(window, m, symbol, interval, atr, swings, current_price)
+                if p is None:
+                    p = self._doji_family(window, m, symbol, interval, atr, swings, current_price, trend)
+                if p is None:
+                    p = self._hammer_family(window, m, symbol, interval, atr, swings, current_price, trend)
+                if p is None:
+                    p = self._spinning_top(window, m, symbol, interval, atr)
+                if p:
+                    patterns.append(p)
 
             # Inside Bar is a candle-PAIR relationship (containment vs. the
             # prior candle), completely independent of the current candle's
@@ -129,10 +137,13 @@ class SingleCandlePatternDetector(BasePatternDetector):
             )
 
         # Standard Doji — roughly balanced wicks, no directional bias yet.
+        # Neutral patterns carry less information, so they need to be
+        # genuinely prominent (a larger size floor) to be worth reporting.
         wick_diff = abs(m.upper_wick - m.lower_wick)
-        if wick_diff <= m.total_range * 0.35:
+        if (wick_diff <= m.total_range * 0.35
+                and m.total_range >= atr * pattern_config.CANDLESTICK_NEUTRAL_MIN_RANGE_ATR_RATIO):
             return self._build_neutral(
-                m, symbol, interval, "standard_doji", "Standard Doji", m.low, m.high,
+                df, m, symbol, interval, "standard_doji", "Standard Doji", m.low, m.high,
             )
         return None
 
@@ -177,8 +188,9 @@ class SingleCandlePatternDetector(BasePatternDetector):
     # ------------------------------------------------------------------
 
     def _spinning_top(self, df, m: CandleMetrics, symbol, interval, atr):
-        if m.body > 0 and wick_at_least(m.upper_wick, m.body) and wick_at_least(m.lower_wick, m.body):
-            return self._build_neutral(m, symbol, interval, "spinning_top", "Spinning Top", m.low, m.high)
+        if (m.body > 0 and wick_at_least(m.upper_wick, m.body) and wick_at_least(m.lower_wick, m.body)
+                and m.total_range >= atr * pattern_config.CANDLESTICK_NEUTRAL_MIN_RANGE_ATR_RATIO):
+            return self._build_neutral(df, m, symbol, interval, "spinning_top", "Spinning Top", m.low, m.high)
         return None
 
     # ------------------------------------------------------------------
@@ -187,6 +199,11 @@ class SingleCandlePatternDetector(BasePatternDetector):
 
     def _inside_bar(self, df, idx, m: CandleMetrics, symbol, interval, atr):
         mother = candle_metrics(df, idx - 1)
+        # The baby is small by definition — the size gate goes on the MOTHER:
+        # a meaningful inside bar follows a genuinely large candle, not two
+        # tiny chop bars that happen to nest.
+        if mother.total_range < atr * pattern_config.CANDLESTICK_NEUTRAL_MIN_RANGE_ATR_RATIO:
+            return None
         if mother.high > m.high and mother.low < m.low:
             # Pass the BABY (m, the current candle) — not the mother — so
             # formation_end/current_price/the chart label all land on the
@@ -194,8 +211,8 @@ class SingleCandlePatternDetector(BasePatternDetector):
             # too early. formation_start is overridden to the mother's
             # timestamp so the pattern's full span is still represented.
             return self._build_neutral(
-                m, symbol, interval, "inside_bar", "Inside Bar", mother.low, mother.high,
-                formation_start_override=mother.timestamp,
+                df, m, symbol, interval, "inside_bar", "Inside Bar", mother.low, mother.high,
+                formation_start_override=mother.timestamp, start_idx=idx - 1,
             )
         return None
 
@@ -209,7 +226,7 @@ class SingleCandlePatternDetector(BasePatternDetector):
         swings, current_price: float, geometry_fit: float,
         rr_override: float | None = None,
     ) -> DetectedPattern:
-        status = status_from_breakout(direction, current_price, breakout_level, stop_loss, atr)
+        status = resolve_forward_status(df, m.idx, direction, breakout_level, stop_loss, atr)
         if rr_override:
             risk = abs(breakout_level - stop_loss)
             sign = 1 if direction == PatternDirection.BULLISH else -1
@@ -221,11 +238,12 @@ class SingleCandlePatternDetector(BasePatternDetector):
         confidence = algorithmic_confidence(
             geometry_fit=geometry_fit,
             volume_confirmation=50.0,
-            breakout_strength=breakout_strength_score(current_price, breakout_level, atr),
+            breakout_strength=STATUS_STRENGTH_SCORE[status],
             pattern_size=clamp(m.total_range / atr * 40),
         )
 
         annotations = ChartAnnotations(
+            zones=[formation_zone(df, m.idx, m.idx, pattern_name, direction)],
             levels=[
                 LevelAnnotation(label="breakout_level", price=round(breakout_level, 8)),
                 LevelAnnotation(label="invalidation_level", price=round(stop_loss, 8)),
@@ -248,10 +266,13 @@ class SingleCandlePatternDetector(BasePatternDetector):
         )
 
     def _build_neutral(
-        self, m: CandleMetrics, symbol, interval, pattern_type, pattern_name,
+        self, df, m: CandleMetrics, symbol, interval, pattern_type, pattern_name,
         range_low: float, range_high: float, formation_start_override: str | None = None,
+        start_idx: int | None = None,
     ) -> DetectedPattern:
         annotations = ChartAnnotations(
+            zones=[formation_zone(df, start_idx if start_idx is not None else m.idx, m.idx,
+                                  pattern_name, PatternDirection.NEUTRAL)],
             levels=[
                 LevelAnnotation(label="range_high", price=round(range_high, 8)),
                 LevelAnnotation(label="range_low", price=round(range_low, 8)),

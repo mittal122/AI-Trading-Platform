@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
 
+from backend.app.core.pattern_config import pattern_config
 from backend.app.schemas.pattern import PatternDirection, PatternStatus
 from backend.app.services.market_service import MarketService
 from backend.app.services.pattern.pattern_factory import PatternFactory
@@ -163,7 +164,7 @@ scanner = PatternScanner()
 result = scanner.scan("BTCUSDT", "1h", limit=300)
 assert result.error is None
 for p in result.patterns:
-    assert p.confidence >= 40.0
+    assert p.confidence >= pattern_config.PATTERN_SCAN_MIN_CONFIDENCE
 print(f"PASS: scan() returned {len(result.patterns)} candlestick/SMC patterns, {len(result.fvgs)} fvgs")
 
 print("\n========== RESULTS: all checks passed ==========")

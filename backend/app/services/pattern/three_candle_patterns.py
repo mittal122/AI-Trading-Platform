@@ -7,11 +7,11 @@ from backend.app.schemas.pattern import (
 from backend.app.services.indicator_service import IndicatorService
 from backend.app.services.pattern.base_pattern_detector import BasePatternDetector
 from backend.app.services.pattern.candlestick_utils import (
-    CandleMetrics, candle_metrics, higher_volume, is_doji, local_trend, opens_within_body,
+    STATUS_STRENGTH_SCORE, CandleMetrics, candle_metrics, formation_zone, higher_volume,
+    is_doji, local_trend, opens_within_body, resolve_forward_status,
 )
 from backend.app.services.pattern.pattern_utils import (
-    algorithmic_confidence, breakout_strength_score, clamp, make_pattern_id,
-    nearest_swing_target, now_iso, risk_reward, status_from_breakout,
+    algorithmic_confidence, clamp, make_pattern_id, nearest_swing_target, now_iso, risk_reward,
 )
 from backend.app.services.pattern.swing_detector import SwingDetector
 
@@ -64,12 +64,17 @@ class ThreeCandlePatternDetector(BasePatternDetector):
         ]
 
         patterns: list[DetectedPattern] = []
+        min_range = atr * cfg.CANDLESTICK_MIN_RANGE_ATR_RATIO
         start = max(2, cfg.CANDLESTICK_TREND_LOOKBACK_BARS)
         for idx in range(start, wn):
             c1 = candle_metrics(window, idx - 2)
             c2 = candle_metrics(window, idx - 1)
             c3 = candle_metrics(window, idx)
             if min(c1.total_range, c2.total_range, c3.total_range) <= 0:
+                continue
+            # Noise floor — the formation's largest candle must be real
+            # relative to recent volatility (see the two-candle detector).
+            if max(c1.total_range, c2.total_range, c3.total_range) < min_range:
                 continue
             trend = local_trend(window, idx - 2)
 
@@ -261,7 +266,7 @@ class ThreeCandlePatternDetector(BasePatternDetector):
         swings, current_price: float, geometry_fit: float,
         rr_override: float | None = None, no_fixed_target: bool = False,
     ) -> DetectedPattern:
-        status = status_from_breakout(direction, current_price, breakout_level, stop_loss, atr)
+        status = resolve_forward_status(df, c_end.idx, direction, breakout_level, stop_loss, atr)
 
         target_1 = None
         rr = None
@@ -277,11 +282,12 @@ class ThreeCandlePatternDetector(BasePatternDetector):
         confidence = algorithmic_confidence(
             geometry_fit=geometry_fit,
             volume_confirmation=50.0,
-            breakout_strength=breakout_strength_score(current_price, breakout_level, atr),
+            breakout_strength=STATUS_STRENGTH_SCORE[status],
             pattern_size=clamp((c_start.total_range + c_end.total_range) / (2 * atr) * 40),
         )
 
         annotations = ChartAnnotations(
+            zones=[formation_zone(df, c_start.idx, c_end.idx, pattern_name, direction)],
             levels=[
                 LevelAnnotation(label="breakout_level", price=round(breakout_level, 8)),
                 LevelAnnotation(label="invalidation_level", price=round(stop_loss, 8)),

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from backend.app.core.pattern_config import pattern_config
+from backend.app.schemas.pattern import PatternDirection, PatternStatus, ZoneAnnotation
 from backend.app.services.pattern.trendline import classify_slope, fit_trendline, slope_pct_per_bar
 
 
@@ -94,12 +95,6 @@ def wick_at_least(wick: float, body: float) -> bool:
     return wick >= body * ratio
 
 
-def roughly_equal(a: float, b: float, tolerance_pct: float) -> bool:
-    if a == 0 or b == 0:
-        return a == b
-    return abs(a - b) / max(abs(a), abs(b)) <= tolerance_pct / 100
-
-
 def gapped_up(prev: CandleMetrics, curr: CandleMetrics) -> bool:
     min_gap = prev.high * pattern_config.CANDLESTICK_GAP_MIN_PCT / 100
     return curr.open > prev.high + min_gap
@@ -122,6 +117,89 @@ def opens_within_body(prev: CandleMetrics, curr: CandleMetrics) -> bool:
     other's range."""
     lo, hi = min(prev.open, prev.close), max(prev.open, prev.close)
     return lo <= curr.open <= hi
+
+
+def resolve_forward_status(
+    df: pd.DataFrame,
+    end_idx: int,
+    direction: PatternDirection,
+    breakout_level: float,
+    invalidation_level: float,
+    atr: float,
+) -> PatternStatus:
+    """Resolve a pattern's status against the candles that came AFTER it —
+    not against today's price, which is meaningless for a pattern formed
+    hundreds of bars ago (the old `status_from_breakout(current_price=...)`
+    approach marked historical patterns CONFIRMED/BROKEN essentially at
+    random once the full-chart scan landed).
+
+    Walks forward bar by bar from the pattern's completion; whichever level
+    is touched first decides. Invalidation is checked before breakout within
+    the same bar — the pessimistic read when one candle spans both.
+
+    Still unresolved at the live edge of the chart, inside the window →
+    DEVELOPING (a genuinely open setup). Unresolved past the window →
+    BROKEN: the setup expired without triggering and is no longer tradeable.
+    """
+    cfg = pattern_config
+    margin = cfg.BREAKOUT_CONFIRMATION_ATR_MULT * atr
+    n = len(df)
+    window_end = min(n, end_idx + 1 + cfg.CANDLESTICK_CONFIRMATION_WINDOW_BARS)
+
+    for i in range(end_idx + 1, window_end):
+        high = float(df["high"].iloc[i])
+        low = float(df["low"].iloc[i])
+        if direction == PatternDirection.BULLISH:
+            if low <= invalidation_level:
+                return PatternStatus.BROKEN
+            if high >= breakout_level + margin:
+                return PatternStatus.CONFIRMED
+        else:
+            if high >= invalidation_level:
+                return PatternStatus.BROKEN
+            if low <= breakout_level - margin:
+                return PatternStatus.CONFIRMED
+
+    still_in_window = (n - (end_idx + 1)) < cfg.CANDLESTICK_CONFIRMATION_WINDOW_BARS
+    return PatternStatus.DEVELOPING if still_in_window else PatternStatus.BROKEN
+
+
+# Feeds algorithmic_confidence's breakout-strength component from the
+# pattern's actual resolved outcome — a pattern that triggered cleanly IS
+# the evidence of breakout strength; one that expired or failed isn't.
+STATUS_STRENGTH_SCORE = {
+    PatternStatus.CONFIRMED: 85.0,
+    PatternStatus.DEVELOPING: 45.0,
+    PatternStatus.BROKEN: 15.0,
+}
+
+
+def formation_zone(
+    df: pd.DataFrame, start_idx: int, end_idx: int, label: str, direction: PatternDirection,
+) -> ZoneAnnotation:
+    """Rectangle spanning the candles that form the pattern — this is what
+    actually DRAWS the pattern on the chart (rendered by the frontend's
+    RectanglesPrimitive, same machinery FVG zones already use). The right
+    edge extends one bar past the last formation candle so a single-candle
+    pattern still has visible width instead of a zero-width line."""
+    segment = df.iloc[start_idx: end_idx + 1]
+    top = float(segment["high"].max())
+    bottom = float(segment["low"].min())
+    n = len(df)
+    if end_idx + 1 < n:
+        end_time = df["timestamps"].iloc[end_idx + 1]
+    elif n >= 2:
+        end_time = df["timestamps"].iloc[end_idx] + (df["timestamps"].iloc[-1] - df["timestamps"].iloc[-2])
+    else:
+        end_time = df["timestamps"].iloc[end_idx]
+    return ZoneAnnotation(
+        label=label,
+        start_time=df["timestamps"].iloc[start_idx].isoformat(),
+        end_time=end_time.isoformat(),
+        top=top,
+        bottom=bottom,
+        bias=direction,
+    )
 
 
 def local_trend(df: pd.DataFrame, idx: int) -> str:

@@ -66,7 +66,11 @@ class RectangleRenderer implements IPrimitivePaneRenderer {
         ctx.lineWidth = 1
         ctx.strokeRect(left, top, boxWidth, boxHeight)
 
-        if (r.label) {
+        // Only draw the name once the box is wide enough for the text to be
+        // readable — on a zoomed-out view, hundreds of few-px-wide zones
+        // each printing their name recreates exactly the text-soup this
+        // zone rendering exists to avoid. Zoom in and names appear.
+        if (r.label && boxWidth >= 40) {
           ctx.font = '10px sans-serif'
           ctx.fillStyle = r.borderColor
           ctx.fillText(r.label, left + 4, top + 12)

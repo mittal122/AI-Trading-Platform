@@ -7,12 +7,11 @@ from backend.app.schemas.pattern import (
 from backend.app.services.indicator_service import IndicatorService
 from backend.app.services.pattern.base_pattern_detector import BasePatternDetector
 from backend.app.services.pattern.candlestick_utils import (
-    CandleMetrics, candle_metrics, gapped_down, gapped_up, higher_volume, local_trend,
-    roughly_equal,
+    STATUS_STRENGTH_SCORE, CandleMetrics, candle_metrics, formation_zone, gapped_down,
+    gapped_up, higher_volume, local_trend, resolve_forward_status,
 )
 from backend.app.services.pattern.pattern_utils import (
-    algorithmic_confidence, breakout_strength_score, clamp, make_pattern_id,
-    nearest_swing_target, now_iso, risk_reward, status_from_breakout,
+    algorithmic_confidence, clamp, make_pattern_id, nearest_swing_target, now_iso, risk_reward,
 )
 from backend.app.services.pattern.swing_detector import SwingDetector
 
@@ -53,11 +52,18 @@ class TwoCandlePatternDetector(BasePatternDetector):
         ]
 
         patterns: list[DetectedPattern] = []
+        min_range = atr * cfg.CANDLESTICK_MIN_RANGE_ATR_RATIO
         start = max(1, cfg.CANDLESTICK_TREND_LOOKBACK_BARS)
         for idx in range(start, wn):
             c1 = candle_metrics(window, idx - 1)
             c2 = candle_metrics(window, idx)
             if c1.total_range <= 0 or c2.total_range <= 0:
+                continue
+            # Noise floor: at least one of the pair must be a real candle
+            # relative to recent volatility — two tiny chop bars trivially
+            # satisfy shape math (equal-ish highs = "Tweezer", nested bodies
+            # = "Harami") and were flooding the results.
+            if max(c1.total_range, c2.total_range) < min_range:
                 continue
             trend = local_trend(window, idx - 1)
             for check in checks:
@@ -171,15 +177,17 @@ class TwoCandlePatternDetector(BasePatternDetector):
     # ------------------------------------------------------------------
 
     def _tweezer(self, df, c1, c2, symbol, interval, atr, swings, current_price, trend):
-        cfg = pattern_config
-        if trend == "DOWN" and roughly_equal(c1.low, c2.low, cfg.CANDLESTICK_EQUAL_LEVEL_TOLERANCE_PCT):
+        # "Equal" is measured in ATR units, not % of price — see the config
+        # comment on CANDLESTICK_TWEEZER_EQUAL_ATR_RATIO.
+        tol = atr * pattern_config.CANDLESTICK_TWEEZER_EQUAL_ATR_RATIO
+        if trend == "DOWN" and abs(c1.low - c2.low) <= tol:
             stop_loss = min(c1.low, c2.low)
             return self._build(
                 df, c1, c2, symbol, interval, "tweezer_bottom", "Tweezer Bottom",
                 PatternDirection.BULLISH, breakout_level=c2.high, stop_loss=stop_loss,
                 atr=atr, swings=swings, current_price=current_price, geometry_fit=65.0,
             )
-        if trend == "UP" and roughly_equal(c1.high, c2.high, cfg.CANDLESTICK_EQUAL_LEVEL_TOLERANCE_PCT):
+        if trend == "UP" and abs(c1.high - c2.high) <= tol:
             stop_loss = max(c1.high, c2.high)
             return self._build(
                 df, c1, c2, symbol, interval, "tweezer_top", "Tweezer Top",
@@ -198,7 +206,7 @@ class TwoCandlePatternDetector(BasePatternDetector):
         swings, current_price: float, geometry_fit: float,
         rr_override: float | None = None, no_fixed_target: bool = False,
     ) -> DetectedPattern:
-        status = status_from_breakout(direction, current_price, breakout_level, stop_loss, atr)
+        status = resolve_forward_status(df, c2.idx, direction, breakout_level, stop_loss, atr)
 
         target_1 = None
         rr = None
@@ -214,11 +222,12 @@ class TwoCandlePatternDetector(BasePatternDetector):
         confidence = algorithmic_confidence(
             geometry_fit=geometry_fit,
             volume_confirmation=50.0 + (10.0 if c2.volume > c1.volume else 0.0),
-            breakout_strength=breakout_strength_score(current_price, breakout_level, atr),
+            breakout_strength=STATUS_STRENGTH_SCORE[status],
             pattern_size=clamp((c1.total_range + c2.total_range) / (2 * atr) * 40),
         )
 
         annotations = ChartAnnotations(
+            zones=[formation_zone(df, c1.idx, c2.idx, pattern_name, direction)],
             levels=[
                 LevelAnnotation(label="breakout_level", price=round(breakout_level, 8)),
                 LevelAnnotation(label="invalidation_level", price=round(stop_loss, 8)),

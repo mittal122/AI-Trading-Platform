@@ -1,5 +1,6 @@
 import time
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 
 import openai
 
@@ -119,9 +120,29 @@ class PatternScanner:
                 risk_reward=p.risk_reward, status=p.status, last_updated=p.last_updated,
             )
             for res in results for p in res.patterns
+            if self._is_recent(p.formation_end, p.interval)
         ]
         rows.sort(key=lambda r: r.confidence, reverse=True)
         return PatternDashboardResponse(rows=rows, scanned_at=now_iso())
+
+    @staticmethod
+    def _is_recent(formation_end: str, interval: str) -> bool:
+        """The dashboard answers "what's actionable NOW" — since the scan
+        covers the full loaded history (and resolves old patterns honestly),
+        a pattern CONFIRMED hundreds of bars ago would otherwise flood it
+        with stale rows. Only patterns completed within the last
+        PATTERN_DASHBOARD_RECENT_BARS bars of their own interval qualify."""
+        try:
+            from backend.app.core.time_utils import interval_to_minutes
+
+            formed = datetime.fromisoformat(formation_end)
+            if formed.tzinfo is None:
+                formed = formed.replace(tzinfo=timezone.utc)
+            age_minutes = (datetime.now(timezone.utc) - formed).total_seconds() / 60
+            max_age = interval_to_minutes(interval) * pattern_config.PATTERN_DASHBOARD_RECENT_BARS
+            return age_minutes <= max_age
+        except Exception:
+            return True  # unparseable timestamp/interval — keep rather than silently drop
 
     @staticmethod
     def _run_detector(detector, market, symbol, interval) -> list[DetectedPattern]:

@@ -20,12 +20,29 @@ class PatternConfig:
     # different feature, not a "chart shape" detector.
     # ------------------------------------------------------------------
 
-    # How far back to scan for candlestick pattern instances. Deliberately
-    # much shorter than the old chart-shape lookbacks (300-1000 bars) —
-    # candlestick patterns are short-term signals; a Hammer from 800 candles
-    # ago is not a meaningful "detection" today the way an old Double Top's
-    # neckline level can still be.
-    CANDLESTICK_LOOKBACK_BARS = 150
+    # How far back to scan for candlestick pattern instances — the full
+    # per-request ceiling (1000, matching Binance/backend's own max), so
+    # every loaded candle on the chart gets checked, not just a trailing
+    # slice. Historical patterns are resolved against the candles that
+    # followed them (see CANDLESTICK_CONFIRMATION_WINDOW_BARS), so an old
+    # detection is still a truthful "this happened here and resolved
+    # this way," not a stale live signal.
+    CANDLESTICK_LOOKBACK_BARS = 1000
+
+    # A pattern's signal candle must be a "real" candle relative to recent
+    # volatility — tiny chop candles trivially satisfy shape ratios (a 2-tick
+    # candle is a "perfect doji") and were flooding the results with noise.
+    CANDLESTICK_MIN_RANGE_ATR_RATIO = 0.6
+    # Neutral/indecision patterns (Standard Doji, Spinning Top, Inside Bar)
+    # fire even more often, and carry less information — they need to be
+    # genuinely prominent to be worth reporting.
+    CANDLESTICK_NEUTRAL_MIN_RANGE_ATR_RATIO = 1.2
+
+    # How many candles AFTER a pattern completes it has to trigger (price
+    # clears the breakout level) or fail (price hits invalidation). A pattern
+    # that does neither within this window is expired — reported as BROKEN,
+    # since its setup is no longer tradeable.
+    CANDLESTICK_CONFIRMATION_WINDOW_BARS = 12
 
     # Body/wick ratio thresholds, straight from standard (Nison-style)
     # candlestick definitions.
@@ -39,7 +56,12 @@ class PatternConfig:
     # main shadow." Single clean ratio, applied uniformly to all 4 shapes.
     CANDLESTICK_OPPOSITE_WICK_MAX_RATIO = 0.3
     CANDLESTICK_MIDPOINT_THRESHOLD = 0.5        # Piercing Line / Dark Cloud Cover
-    CANDLESTICK_EQUAL_LEVEL_TOLERANCE_PCT = 0.15  # Tweezer Top/Bottom "same" high/low
+    # Tweezer "same high/low" tolerance, in ATR units — NOT % of price. A
+    # %-of-price tolerance (originally 0.15%) was nearly a full ATR on
+    # intraday BTC, so almost any two adjacent candles counted as a Tweezer
+    # (231 of them in one 1000-candle scan). Two wicks are only "equal" if
+    # they differ by a small fraction of normal candle movement.
+    CANDLESTICK_TWEEZER_EQUAL_ATR_RATIO = 0.2
     CANDLESTICK_GAP_MIN_PCT = 0.05              # Kickers: min % gap between C1 and C2
     CANDLESTICK_VOLUME_MULTIPLIER = 1.0         # Kickers/Engulfing: C2 volume > C1 volume
     CANDLESTICK_STAR_BODY_MAX_PCT = 30.0        # Morning/Evening Star: max middle-candle body vs C1/C3
@@ -86,7 +108,15 @@ class PatternConfig:
     # Multi-timeframe scan defaults
     PATTERN_SCAN_INTERVALS = ["1m", "3m", "5m", "15m", "30m", "1h", "4h", "1d", "1w"]
     PATTERN_SCAN_MAX_WORKERS = 8
-    PATTERN_SCAN_MIN_CONFIDENCE = 40.0
+    # Raised from 40 (2026-07-04) as part of the noise-reduction pass — with
+    # the full-chart scan finding many more candidates, weak matches below
+    # this bar aren't worth returning at all.
+    PATTERN_SCAN_MIN_CONFIDENCE = 55.0
+
+    # The cross-timeframe dashboard answers "what's actionable NOW" — only
+    # patterns that completed within this many bars (of their own interval)
+    # appear there. The full-history scan on the chart page is unaffected.
+    PATTERN_DASHBOARD_RECENT_BARS = 20
     # AI explanation calls are real network I/O against NVIDIA NIM — capped
     # lower than the pure-CPU detector concurrency to avoid hammering the
     # API when a multi-timeframe scan is itself running scans concurrently.

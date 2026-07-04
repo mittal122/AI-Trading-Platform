@@ -1,5 +1,6 @@
 import backend.app.core.config  # noqa: F401 — triggers load_dotenv() for AI calls
 
+from backend.app.core.pattern_config import pattern_config
 from backend.app.services.market_service import MarketService
 from backend.app.services.pattern.pattern_factory import PatternFactory
 from backend.app.services.pattern.pattern_scanner import PatternScanner
@@ -42,7 +43,7 @@ assert result.error is None
 seen_ids = {p.id for p in result.patterns}
 assert len(seen_ids) == len(result.patterns), "expected unique pattern ids"
 for p in result.patterns:
-    assert p.confidence >= 40.0, "scan should filter below PATTERN_SCAN_MIN_CONFIDENCE"
+    assert p.confidence >= pattern_config.PATTERN_SCAN_MIN_CONFIDENCE, "scan should filter below PATTERN_SCAN_MIN_CONFIDENCE"
     assert p.ai is None, "include_ai defaults to False — scan() should NOT auto-attach AI"
 assert elapsed < 15.0, f"fast-path scan should be well under 15s, took {elapsed:.1f}s"
 print(f"PASS: scan() returned {len(result.patterns)} patterns, {len(result.fvgs)} fvgs in {elapsed:.1f}s, no AI attached")
