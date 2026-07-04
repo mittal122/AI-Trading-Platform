@@ -64,6 +64,10 @@ export default function Dashboard() {
       grid: { vertLines: { color: '#1a1d27' }, horzLines: { color: '#1a1d27' } },
       timeScale: { borderColor: '#2a2d3e' },
       rightPriceScale: { borderColor: '#2a2d3e' },
+      // Disable manual price-axis dragging — it lets autoScale get overridden
+      // into an arbitrary (including negative) range with no floor. Time-axis
+      // zoom/scroll (wheel + drag) stays enabled.
+      handleScale: { axisPressedMouseMove: { time: true, price: false } },
       width: chartRef.current.clientWidth,
       height: 320,
     })
@@ -72,6 +76,16 @@ export default function Dashboard() {
       upColor: '#22c55e', downColor: '#ef4444',
       borderUpColor: '#22c55e', borderDownColor: '#ef4444',
       wickUpColor: '#22c55e', wickDownColor: '#ef4444',
+      // Price can never be negative — clamp autoScale's padded range at 0
+      // (matters for low-priced altcoins, where default padding can dip
+      // below zero).
+      autoscaleInfoProvider: (original: () => any) => {
+        const res = original()
+        if (res?.priceRange) {
+          return { ...res, priceRange: { ...res.priceRange, minValue: Math.max(0, res.priceRange.minValue) } }
+        }
+        return res
+      },
     })
 
     // Ascending by time, deduped — the full history loaded so far.
@@ -135,6 +149,11 @@ export default function Dashboard() {
       if (Array.isArray(candles) && candles.length > 0) {
         allCandles = candles
         candleSeries.setData(allCandles.map(toBar))
+        // Focus the view on the current price (right edge) whenever a new
+        // symbol is loaded — without this, switching coins (or after having
+        // scrolled into older history on the previous one) left the chart
+        // wherever it happened to be, not on the latest candle.
+        chart.timeScale().fitContent()
         if (candles.length < INITIAL_CANDLES) hasMore = false
       } else {
         hasMore = false

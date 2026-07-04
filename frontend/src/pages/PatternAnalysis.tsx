@@ -256,6 +256,10 @@ export default function PatternAnalysis() {
       grid: { vertLines: { color: '#1a1d27' }, horzLines: { color: '#1a1d27' } },
       timeScale: { borderColor: '#2a2d3e' },
       rightPriceScale: { borderColor: '#2a2d3e' },
+      // Disable manual price-axis dragging — it lets autoScale get overridden
+      // into an arbitrary (including negative) range with no floor. Time-axis
+      // zoom/scroll (wheel + drag) stays enabled.
+      handleScale: { axisPressedMouseMove: { time: true, price: false } },
       width: chartRef.current.clientWidth,
       height: 420,
     })
@@ -263,6 +267,16 @@ export default function PatternAnalysis() {
       upColor: '#22c55e', downColor: '#ef4444',
       borderUpColor: '#22c55e', borderDownColor: '#ef4444',
       wickUpColor: '#22c55e', wickDownColor: '#ef4444',
+      // Price can never be negative — clamp autoScale's padded range at 0
+      // (matters for low-priced altcoins, where default padding can dip
+      // below zero).
+      autoscaleInfoProvider: (original: () => any) => {
+        const res = original()
+        if (res?.priceRange) {
+          return { ...res, priceRange: { ...res.priceRange, minValue: Math.max(0, res.priceRange.minValue) } }
+        }
+        return res
+      },
     })
     chartApiRef.current = chart
     candleSeriesRef.current = candleSeries
