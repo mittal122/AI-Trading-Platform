@@ -1599,6 +1599,56 @@ deleted (not requested back).
   symbol/interval combos tested (H&S, wedges, flags, pennant, triangle,
   rectangle all firing).
 
+### All 11 reference chart patterns + shapes-first priority (2026-07-05, same day)
+
+User (with an 11-pattern cheat-sheet: staircases, 3 triangles, flag, wedge,
+double top/bottom, H&S, rounded top/bottom, cup & handle): "not able to see
+any drawing," wants all 11 in the pattern section, chart shapes scanned
+BEFORE candlesticks, and drawn like the reference. Root cause of "no
+drawings": chart shapes are rare and often score below the 70% display
+filter (a DEVELOPING wedge at 52% was both backend-floored at 55 and
+frontend-hidden at 70), plus they were buried under hundreds of candlestick
+rows sorted purely by confidence.
+
+- **Coverage**: 9 of 11 already existed. Added the missing 2:
+  - `staircase_detector.py` (NEW) — Ascending/Descending Staircase: last
+    `STAIRCASE_MIN_SWINGS_PER_SIDE=3` swing highs AND lows strictly
+    rising/falling, net move ≥ `STAIRCASE_MIN_NET_MOVE_ATR=3` ATRs. Draws a
+    multi-point zigzag polyline through the swings (TrendlineAnnotation
+    labels `staircase_up`/`staircase_down` → green/red on the chart);
+    trend-structure semantics: breakout = latest swing high (continuation),
+    invalidation = latest higher-low (break of structure), target = one
+    more average-sized step. Live-edge → current-price status.
+  - Rounded Top — added to the restored `cup_handle_detector.py` (git
+    `8bd6909^`) as `_find_dome`/`_build_rounded_top`, the exact mirror of
+    the cup fit (parabola must open DOWNWARD between two comparable rim
+    LOWS, breakdown through the rim level, bearish measured move).
+    Cup & Handle + Rounding Bottom came back with the restore.
+- **Category system**: `DetectedPattern.category` (`'chart'|'candlestick'|
+  'smc'`, default candlestick) stamped by `PatternScanner` from the
+  detector key via new `PatternFactory.CATEGORIES`. `DETECTORS` dict
+  reordered chart-shapes-first — the scanner preserves that order in its
+  response (the user's "scan these 11 first, then candlesticks").
+- **Floor exemption**: `PATTERN_SCAN_MIN_CONFIDENCE` (backend) and the
+  Min-conf slider (frontend) now apply ONLY to the candlestick category —
+  the floor exists to cut candlestick noise (hundreds/scan); chart shapes
+  and SMC are a handful per scan and explicitly wanted visible. "Failed
+  hidden" still applies to everything. Two test assertions updated to
+  check the floor per-category (`test_pattern_scanner.py`,
+  `test_candlestick_patterns.py`).
+- **Frontend**: list grouped under "Chart Patterns" / "Candlestick
+  Patterns" / "Smart Money" headers (chart first, confidence-sorted within
+  each); auto-select prefers a chart shape when one exists; trendline
+  colors for `staircase_up`(green)/`staircase_down`(red)/`cup_curve`(amber).
+- Verified live (ETHUSDT/1h): CHART PATTERNS section on top with Triple
+  Bottom (TOP), Rising Wedge, H&S, **Cup and Handle (71%, CONFIRMED)**,
+  Pennant (Forming); selected Triple Bottom fully drawn (troughs, breakout,
+  targets 1-3, stop). All 49 test files pass (incl. new synthetic
+  ascending-staircase test — gotcha: adjacent equal closes at synthetic
+  segment joints defeat the STRICT fractal extreme check, offset the joint
+  values). Backend scan: ~11-19 chart shapes per 1000-candle scan vs 380+
+  candlesticks — grouping/exemption is what makes them findable.
+
 ---
 
 ## Immediate Next Task

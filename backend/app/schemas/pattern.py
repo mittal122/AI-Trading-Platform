@@ -82,6 +82,12 @@ class DetectedPattern(BaseModel):
     id: str
     pattern_type: str
     pattern_name: str
+    # Which family this belongs to — 'chart' (classical shapes: triangles,
+    # wedges, double tops, H&S, staircases, cups…), 'candlestick'
+    # (single/two/three-candle formations), or 'smc' (BOS/CHOCH/order
+    # blocks/liquidity). Set by PatternScanner from the detector key; the
+    # frontend groups the results list by it (chart shapes shown first).
+    category: str = "candlestick"
     symbol: str
     interval: str
     direction: PatternDirection

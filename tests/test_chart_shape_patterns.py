@@ -15,7 +15,10 @@ from backend.app.services.pattern.double_triple_patterns import DoubleTriplePatt
 from backend.app.services.pattern.pattern_factory import PatternFactory
 from backend.app.services.market_service import MarketService
 
-SHAPE_KEYS = ["double_triple", "head_shoulders", "triangle", "wedge", "flag_pennant", "channel_rectangle"]
+SHAPE_KEYS = [
+    "staircase", "double_triple", "head_shoulders", "triangle", "wedge",
+    "flag_pennant", "channel_rectangle", "cup_handle",
+]
 
 
 def _df(closes: list[float]) -> pd.DataFrame:
@@ -54,7 +57,30 @@ assert p.status == PatternStatus.CONFIRMED, (
 assert p.annotations.trendlines and p.annotations.trendlines[0].label == "neckline"
 print(f"PASS: {p.pattern_name} — {p.direction}, status={p.status}, neckline drawn at {p.breakout_level}")
 
-print("\n========== LIVE DATA — all 6 shape families ==========\n")
+print("\n========== SYNTHETIC ASCENDING STAIRCASE ==========\n")
+from backend.app.services.pattern.staircase_detector import StaircaseDetector
+
+# Clean stair-steps: rise ~10, retrace ~4, repeat — higher highs AND higher
+# lows throughout, net move far beyond the ATR floor. Segment joints are
+# offset slightly so no two adjacent bars share an identical high/low (the
+# fractal swing detector requires a STRICT local extreme).
+stair_closes = []
+level = 100.0
+for _ in range(6):
+    stair_closes += list(np.linspace(level, level + 10, 8))          # step up (peak = level+10)
+    stair_closes += list(np.linspace(level + 9.4, level + 6.2, 6))   # shallow retrace
+    level += 6  # next leg starts at level+6 — a strict local minimum at each joint
+df_stairs = _df(stair_closes)
+stair_results = StaircaseDetector().detect(df_stairs, "TESTUSDT", "1h")
+assert stair_results, "expected an ascending staircase on clean HH/HL stair-steps"
+sp = stair_results[0]
+assert sp.pattern_type == "ascending_staircase"
+assert sp.direction == PatternDirection.BULLISH
+zig = sp.annotations.trendlines[0]
+assert zig.label == "staircase_up" and len(zig.points) >= 6, "staircase must draw a multi-point zigzag"
+print(f"PASS: {sp.pattern_name} — zigzag with {len(zig.points)} swing points drawn")
+
+print("\n========== LIVE DATA — all 8 shape families ==========\n")
 market = MarketService().get_market_data(symbol="BTCUSDT", interval="1h", limit=1000)
 total = 0
 for key in SHAPE_KEYS:
@@ -70,6 +96,6 @@ for key in SHAPE_KEYS:
         )
     total += len(found)
     print(f"{key:<20} -> {len(found)} pattern(s)")
-print(f"PASS: all 6 restored detectors run cleanly ({total} patterns), every result drawable")
+print(f"PASS: all 8 shape detectors run cleanly ({total} patterns), every result drawable")
 
 print("\n========== RESULTS: all checks passed ==========")

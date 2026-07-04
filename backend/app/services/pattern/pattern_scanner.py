@@ -71,17 +71,29 @@ class PatternScanner:
                 scanned_at=now_iso(), error=str(exc),
             )
 
-        detectors = PatternFactory.all_detectors()
         with ThreadPoolExecutor(max_workers=pattern_config.PATTERN_SCAN_MAX_WORKERS) as pool:
-            futures = [pool.submit(self._run_detector, d, market, symbol, interval) for d in detectors]
+            # DETECTORS dict order = scan/report priority: chart shapes
+            # first, then candlestick formations, then SMC. All run
+            # concurrently; the ordering shapes the response list.
+            futures = [
+                (key, pool.submit(self._run_detector, PatternFactory.get_detector(key), market, symbol, interval))
+                for key in PatternFactory.list_detectors()
+            ]
             fvg_future = pool.submit(self._run_fvg, market, symbol, interval)
             all_patterns: list[DetectedPattern] = []
-            for f in futures:
-                all_patterns.extend(f.result())
+            for key, f in futures:
+                category = PatternFactory.CATEGORIES.get(key, "candlestick")
+                for p in f.result():
+                    p.category = category
+                    all_patterns.append(p)
             fvgs = fvg_future.result()
 
+        # The confidence floor exists to cut candlestick noise (hundreds of
+        # candidates per scan). Chart shapes and SMC structures are rare —
+        # a handful per scan at most — and the user explicitly wants to SEE
+        # them, so they bypass the floor.
         min_conf = pattern_config.PATTERN_SCAN_MIN_CONFIDENCE
-        patterns = [p for p in all_patterns if p.confidence >= min_conf]
+        patterns = [p for p in all_patterns if p.category != "candlestick" or p.confidence >= min_conf]
         if include_ai:
             patterns = self._attach_ai(patterns)
 

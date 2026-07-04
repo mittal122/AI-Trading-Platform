@@ -51,10 +51,13 @@ def _find(results, pattern_type):
 print("\n========== FACTORY REGISTRATION ==========\n")
 assert set(PatternFactory.list_detectors()) == {
     "single_candle", "two_candle", "three_candle",
-    "double_triple", "head_shoulders", "triangle", "wedge",
-    "flag_pennant", "channel_rectangle", "smc",
+    "staircase", "double_triple", "head_shoulders", "triangle", "wedge",
+    "flag_pennant", "channel_rectangle", "cup_handle", "smc",
 }
-print("PASS: candlestick + restored chart-shape + SMC detectors all registered")
+# Chart shapes must come FIRST in the detector ordering (scan priority).
+keys = PatternFactory.list_detectors()
+assert keys.index("staircase") < keys.index("single_candle"), "chart shapes scan before candlesticks"
+print("PASS: all 12 detectors registered, chart shapes ordered first")
 
 print("\n========== SINGLE-CANDLE: Marubozu (no trend requirement) ==========\n")
 df = _base_df(direction="FLAT")
@@ -168,7 +171,8 @@ scanner = PatternScanner()
 result = scanner.scan("BTCUSDT", "1h", limit=300)
 assert result.error is None
 for p in result.patterns:
-    assert p.confidence >= pattern_config.PATTERN_SCAN_MIN_CONFIDENCE
+    if p.category == "candlestick":
+        assert p.confidence >= pattern_config.PATTERN_SCAN_MIN_CONFIDENCE
 print(f"PASS: scan() returned {len(result.patterns)} candlestick/SMC patterns, {len(result.fvgs)} fvgs")
 
 print("\n========== RESULTS: all checks passed ==========")

@@ -166,14 +166,22 @@ export default function PatternAnalysis() {
     (latest, t) => (!latest || t.last_updated > latest ? t.last_updated : latest), null,
   )
   const scanLimit = Math.min(Math.max(loadedCount, INITIAL_CANDLES), MAX_SCAN_LIMIT)
-  // Quality gate for what's SHOWN (list + chart): the backend returns every
-  // pattern above its own floor, but by default only high-confidence,
-  // non-failed setups are displayed — the raw firehose was unreadable
-  // (a label on nearly every candle). The user can loosen these.
+  // Quality gate for what's SHOWN (list + chart). The Min-conf slider only
+  // applies to CANDLESTICK patterns — they're the noisy family (hundreds
+  // per scan). Chart shapes (staircases, triangles, wedges, double tops,
+  // H&S, cups…) and SMC structures are rare and explicitly wanted visible,
+  // so they always show unless BROKEN is hidden.
   const filteredPatterns = patterns.filter(p =>
-    p.confidence >= minConfidence && (showBroken || p.status !== 'BROKEN'))
-  // Highest-confidence pattern first — the list's own priority ranking.
-  const sortedPatterns = [...filteredPatterns].sort((a, b) => b.confidence - a.confidence)
+    (showBroken || p.status !== 'BROKEN')
+    && ((p.category ?? 'candlestick') !== 'candlestick' || p.confidence >= minConfidence))
+  // Chart shapes first (the reference patterns), then candlesticks, then
+  // Smart Money — confidence-sorted within each group.
+  const CATEGORY_RANK: Record<string, number> = { chart: 0, candlestick: 1, smc: 2 }
+  const sortedPatterns = [...filteredPatterns].sort((a, b) => {
+    const ra = CATEGORY_RANK[a.category ?? 'candlestick'] ?? 1
+    const rb = CATEGORY_RANK[b.category ?? 'candlestick'] ?? 1
+    return ra !== rb ? ra - rb : b.confidence - a.confidence
+  })
   const topPatternId = sortedPatterns[0]?.id ?? null
 
   async function fetchCandlesCached(sym: string, itv: string, limit: number, endTime?: number): Promise<Candle[]> {
@@ -199,8 +207,12 @@ export default function PatternAnalysis() {
       setSelectedId(prev => {
         if (prev && fresh.some(p => p.id === prev)) return prev
         const displayable = fresh.filter(p =>
-          p.confidence >= minConfidence && (showBroken || p.status !== 'BROKEN'))
-        return displayable.sort((a, b) => b.confidence - a.confidence)[0]?.id ?? null
+          (showBroken || p.status !== 'BROKEN')
+          && ((p.category ?? 'candlestick') !== 'candlestick' || p.confidence >= minConfidence))
+        // Prefer a chart shape as the default selection when one exists.
+        const charts = displayable.filter(p => p.category === 'chart')
+        const pool = charts.length > 0 ? charts : displayable
+        return pool.sort((a, b) => b.confidence - a.confidence)[0]?.id ?? null
       })
       if (res.data.error) setError(res.data.error)
     } catch (e: any) {
@@ -540,7 +552,12 @@ export default function PatternAnalysis() {
       const bullish = p.direction !== 'BEARISH'
       const isSelected = p.id === selectedId
       drawTrendlines(chart, a, lineSeriesRef, tl =>
-        tl.label.includes('resistance') ? '#ef4444' : tl.label.includes('support') ? '#22c55e' : '#818cf8')
+        tl.label === 'staircase_up' ? '#22c55e'
+          : tl.label === 'staircase_down' ? '#ef4444'
+          : tl.label === 'cup_curve' ? '#fbbf24'
+          : tl.label.includes('resistance') ? '#ef4444'
+          : tl.label.includes('support') ? '#22c55e'
+          : '#818cf8')
       allRectangles.push(...zonesToRectangles(a, nowIso))
 
       if (!isSelected) return
@@ -768,10 +785,21 @@ export default function PatternAnalysis() {
                 </p>
               ) : (
                 <div className="space-y-1 max-h-[65vh] overflow-y-auto">
-                  {sortedPatterns.map(p => {
+                  {sortedPatterns.map((p, i) => {
                     const hidden = hiddenPatternIds.has(p.id)
+                    const cat = p.category ?? 'candlestick'
+                    const prevCat = i > 0 ? (sortedPatterns[i - 1].category ?? 'candlestick') : null
+                    const groupHeader = cat !== prevCat
+                      ? { chart: 'Chart Patterns', candlestick: 'Candlestick Patterns', smc: 'Smart Money' }[cat]
+                      : null
                     return (
-                      <div key={p.id}
+                      <div key={p.id}>
+                      {groupHeader && (
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 pt-2 pb-1 px-2">
+                          {groupHeader}
+                        </p>
+                      )}
+                      <div
                         onClick={() => handlePatternRowClick(p.id)}
                         onDoubleClick={() => handlePatternRowDoubleClick(p.id)}
                         title="Click to hide/show · double-click for details"
@@ -798,6 +826,7 @@ export default function PatternAnalysis() {
                             <span className="text-xs text-slate-500">{p.confidence.toFixed(0)}%</span>
                           </span>
                         </span>
+                      </div>
                       </div>
                     )
                   })}

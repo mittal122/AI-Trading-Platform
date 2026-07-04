@@ -43,7 +43,10 @@ assert result.error is None
 seen_ids = {p.id for p in result.patterns}
 assert len(seen_ids) == len(result.patterns), "expected unique pattern ids"
 for p in result.patterns:
-    assert p.confidence >= pattern_config.PATTERN_SCAN_MIN_CONFIDENCE, "scan should filter below PATTERN_SCAN_MIN_CONFIDENCE"
+    # The confidence floor only applies to the noisy candlestick family —
+    # chart shapes and SMC structures bypass it deliberately (rare + wanted).
+    if p.category == "candlestick":
+        assert p.confidence >= pattern_config.PATTERN_SCAN_MIN_CONFIDENCE, "scan should filter below PATTERN_SCAN_MIN_CONFIDENCE"
     assert p.ai is None, "include_ai defaults to False — scan() should NOT auto-attach AI"
 assert elapsed < 15.0, f"fast-path scan should be well under 15s, took {elapsed:.1f}s"
 print(f"PASS: scan() returned {len(result.patterns)} patterns, {len(result.fvgs)} fvgs in {elapsed:.1f}s, no AI attached")

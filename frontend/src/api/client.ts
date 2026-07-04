@@ -150,6 +150,7 @@ export interface AIPatternExplanation {
 
 export interface DetectedPattern {
   id: string; pattern_type: string; pattern_name: string
+  category?: 'chart' | 'candlestick' | 'smc'
   symbol: string; interval: string
   direction: 'BULLISH' | 'BEARISH' | 'NEUTRAL'
   confidence: number

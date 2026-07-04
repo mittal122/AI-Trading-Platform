@@ -116,6 +116,23 @@ class PatternConfig:
     CHANNEL_LOOKBACK_BARS = 300
     CHANNEL_MIN_TOUCHES_PER_SIDE = 2
 
+    # Cup & Handle / Rounding Bottom / Rounded Top — bounded by definition
+    # (a cup spanning the whole loaded history is noise, not a cup)
+    CUP_MIN_BARS = 30
+    CUP_MAX_BARS = 250
+    CUP_DEPTH_MIN_PCT = 8.0
+    CUP_DEPTH_MAX_PCT = 50.0
+    CUP_RIM_TOLERANCE_PCT = 5.0
+    HANDLE_MAX_BARS = 40
+    HANDLE_MAX_RETRACE_PCT = 50.0
+
+    # Ascending / Descending Staircase — trend structure as a pattern:
+    # the last N swing highs AND lows must be strictly rising (or falling),
+    # with a meaningful net move so a flat wobble doesn't qualify.
+    STAIRCASE_LOOKBACK_BARS = 250
+    STAIRCASE_MIN_SWINGS_PER_SIDE = 3
+    STAIRCASE_MIN_NET_MOVE_ATR = 3.0
+
     # Forward-resolution window for HISTORICALLY-anchored chart shapes
     # (Double/Triple Top, H&S) — larger formations take longer to play out
     # than the candlestick default of 12 bars. Live-edge shapes (Triangle,
