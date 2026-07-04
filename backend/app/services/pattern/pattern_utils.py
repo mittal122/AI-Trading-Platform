@@ -101,6 +101,30 @@ def algorithmic_confidence(
     return round(clamp(score), 2)
 
 
+def nearest_swing_target(
+    swings: list, idx: int, direction: PatternDirection, current_price: float, atr: float,
+) -> float:
+    """Nearest swing high (bullish) / swing low (bearish) beyond idx that's
+    still ahead of current price — the "next major resistance/support"
+    target several candlestick patterns call for. In practice a pattern
+    detected at the most recent candle has no future swings yet (fractal
+    detection needs bars on both sides), so this falls back to a simple
+    ATR-scaled projection — the natural stand-in for "next major level"
+    before that level has actually formed."""
+    kind = "high" if direction == PatternDirection.BULLISH else "low"
+    candidates = [s for s in swings if s.kind == kind and s.index > idx]
+    if direction == PatternDirection.BULLISH:
+        ahead = [s.price for s in candidates if s.price > current_price]
+        if ahead:
+            return min(ahead)
+    else:
+        ahead = [s.price for s in candidates if s.price < current_price]
+        if ahead:
+            return max(ahead)
+    sign = 1 if direction == PatternDirection.BULLISH else -1
+    return current_price + sign * atr * 3.0
+
+
 def breakout_strength_score(current_price: float, breakout_level: float, atr: float) -> float:
     """How far price has already moved past the breakout level, in ATR units — 0-100 scale."""
     if not breakout_level or not atr or atr <= 0:

@@ -671,6 +671,18 @@ further back.
 
 ### Post-Phase-10 addition — AI-Based Automatic Pattern Recognition (2026-07-03)
 
+> **SUPERSEDED (2026-07-04):** the 8 classical chart-shape detectors
+> described in this section (Double/Triple Top, Head & Shoulders, Triangle,
+> Wedge, Flag/Pennant, Channel/Rectangle, Cup & Handle, Diamond/Broadening)
+> were **deleted** by explicit user request and replaced with a full
+> candlestick-pattern engine (~32 patterns). See "Candlestick pattern engine
+> replaces classical chart-shape detectors" further down for the current
+> state. FVG and SMC (also described below) were NOT touched — still exactly
+> as documented here. This section is kept for history/context on the
+> shared foundation (`SwingDetector`, `trendline.py`, `pattern_utils.py`,
+> `PatternFactory`/`PatternScanner` architecture) that the new engine reuses
+> unchanged.
+
 User's full spec: automatic multi-pattern chart detection (~20 classical patterns),
 FVG, SMC (order blocks/BOS/CHOCH/liquidity), multi-timeframe, AI explanation +
 recommendation per pattern, chart annotation overlay, a pattern dashboard. Given
@@ -1112,6 +1124,164 @@ map entry + help content).
 - Verified: full `AnalysisScanner.scan()` (all 7 tools) returns zero errors
   including `trend`; all 43 test files (41 prior + this + the same-session
   exchange-credentials test) pass; frontend `tsc --noEmit` clean.
+
+### Candlestick pattern engine replaces classical chart-shape detectors (2026-07-04)
+
+User's explicit instruction: delete all 8 classical chart-shape detectors
+(Double/Triple Top, Head & Shoulders, Triangle, Wedge, Flag/Pennant,
+Channel/Rectangle, Cup & Handle, Diamond/Broadening) and replace them with
+~32 candlestick patterns from a pasted reference table (pattern, detection
+rules, confirmation, entry, stop, target, notes — one row per pattern).
+Confirmed via AskUserQuestion before touching anything, since deleting 8
+tested/working detectors is exactly the kind of hard-to-reverse call this
+project's instructions say to check first — user explicitly chose "delete,
+candlesticks only" and "all ~32 at once" over the safer phased/keep-both
+defaults offered.
+
+**Architecture — reused, not rebuilt.** The existing pattern-module
+foundation turned out to fit almost perfectly with zero schema changes:
+`DetectedPattern` (status DEVELOPING/CONFIRMED/BROKEN, breakout_level/
+invalidation_level, entry_zone, stop_loss, target_1-3, `ChartAnnotations`
+with trendlines/zones/levels/labels), `BasePatternDetector.detect(df,
+symbol, interval) -> list[DetectedPattern]`, `PatternFactory`/
+`PatternScanner` (concurrent multi-detector scan, on-demand AI explain, one
+shared AI thread pool) — none of this needed to change. Only
+`PatternFactory.DETECTORS` was swapped: the 8 old keys →
+`single_candle`/`two_candle`/`three_candle` (SMC + FVG untouched, they're a
+separate feature, not a "chart shape").
+
+- **`backend/app/services/pattern/candlestick_utils.py`** (NEW) — shared
+  per-candle metrics (`CandleMetrics`: body/upper_wick/lower_wick/
+  total_range/is_bullish/midpoint) computed once and reused by every
+  pattern check, instead of 32 copies of wick/body math. Also: `is_marubozu`/
+  `is_doji`/`is_long_lower_wick`/`is_long_upper_wick`/`wick_at_least`/
+  `roughly_equal`/`gapped_up`/`gapped_down`/`higher_volume`, and
+  `local_trend(df, idx)` — a short-window least-squares slope read (reuses
+  `fit_trendline`/`classify_slope` from the Trend Line tool's
+  `pattern/trendline.py`, same primitive, shorter lookback) answering the
+  "Trend is Up/Down" gate almost every pattern in the table requires.
+- **`backend/app/services/pattern/pattern_utils.py`** gained
+  `nearest_swing_target()` — "next major support/resistance" targets (used
+  by several patterns) reuse `SwingDetector`; since a pattern detected at
+  the most recent candle has no *future* swings yet (fractals need bars on
+  both sides), this falls back to an ATR×3 projection — the natural stand-in
+  for "next major level" before that level has actually formed.
+- **Confirmation logic reuses `status_from_breakout()` uniformly** — every
+  confirmable pattern's own high/low (or a specific rule-defined level, e.g.
+  Three Line Strike's `C1.open`) becomes `breakout_level`; its stop becomes
+  `invalidation_level`. DEVELOPING → CONFIRMED → BROKEN falls out of the
+  exact same shared function every other pattern family already used — no
+  special-cased "is this pattern already confirmed by its own last candle"
+  branching needed, even for the patterns whose own table row says "C3/C4
+  itself is the confirmation" (Star, Three Line Strike, Three Outside/Inside
+  Up/Down) — their breakout_level is simply set at the exact price their own
+  detection rule already required price to clear, so status reads CONFIRMED
+  immediately and can still correctly flip to BROKEN later if price reverses
+  hard against it.
+- **Three detector files**, one per candle-count family (`BasePatternDetector`
+  subclasses, registered in `PatternFactory`):
+  - `single_candle_patterns.py` — Marubozu, Standard/Dragonfly/Gravestone
+    Doji, Hammer, Hanging Man, Inverted Hammer, Shooting Star, Spinning Top,
+    Inside Bar (10 patterns; Inside Bar needs one prior "mother" candle).
+    Standard Doji, Spinning Top, and Inside Bar are genuinely
+    direction-**neutral** by definition — which way they resolve depends on
+    a breakout that hasn't happened yet at detection time. These are
+    reported as `direction=NEUTRAL`, `status=DEVELOPING` always, with
+    `stop_loss`/`target_1` left `None` and both the range-high and range-low
+    shown as chart levels instead of guessing a direction — the honest
+    representation of "undecided," not a missing feature (verified via a
+    dedicated synthetic test asserting exactly this).
+  - `two_candle_patterns.py` — Bullish/Bearish Kicker, Bullish/Bearish
+    Engulfing, Bullish/Bearish Harami, Piercing Line, Dark Cloud Cover,
+    Tweezer Bottom/Top (10 patterns). Bearish Kicker and Three White
+    Soldiers/Black Crows (below) use `no_fixed_target=True` — their own
+    table row says "Trailing Stop until reversal," so `target_1` is
+    correctly left `None` rather than inventing a number the source
+    material explicitly says doesn't exist.
+  - `three_candle_patterns.py` — Morning/Evening Star, Bullish/Bearish
+    Abandoned Baby, Three White Soldiers/Black Crows, Bullish/Bearish Three
+    Line Strike, Three Outside Up/Down, Three Inside Up/Down (12 patterns;
+    Three Line Strike needs a 4th candle — C1-C3 form the setup, C4 is the
+    massive engulfing confirmation candle, both part of the same
+    detection pass, not a later confirmation).
+  - Every pattern's Entry/Stop/Target follows the reference table exactly,
+    including its explicit R/R ratios where given (Hammer/Kicker 1:2,
+    Harami/Three Inside/Three Outside 1:1.5) via a shared `rr_override`
+    param, and its exact stated stop level even where asymmetric across a
+    bull/bear pair (e.g. Bearish Kicker's confirmation is against `C2.low`
+    while Bullish Kicker's is against `C1.high` — matched literally, not
+    "symmetrized" for tidiness).
+- **New config block**: `pattern_config.py` gained `CANDLESTICK_*` (wick/body
+  ratio thresholds, midpoint threshold, equal-level tolerance, gap/volume
+  multipliers, star body max, soldier/crow min ATR multiple, trend-context
+  lookback+tolerance, default R/R) — all sourced directly from the user's
+  table's "Detection Parameters" column, no hardcoded literals in the
+  detector files themselves. The old chart-shape-only config constants
+  (`DT_*`, `HS_*`, `TRIANGLE_*`, `WEDGE_*`, `FLAGPOLE_*`/`FLAG_*`,
+  `CHANNEL_*`, `CUP_*`/`HANDLE_*`, `BROADENING_*`/`DIAMOND_*`) were removed
+  as dead config alongside their detector files. `FVG_*`/`SMC_*`/`OB_*`/
+  `LIQUIDITY_*`/`BOS_*`/`PATTERN_SCAN_*`/`CONF_WEIGHT_*` etc. are untouched
+  — still shared/used.
+  `CANDLESTICK_LOOKBACK_BARS = 150` — deliberately much shorter than the old
+  chart-shape lookbacks (300-1000 bars): candlestick patterns are short-term
+  signals, a Hammer from 800 candles back isn't a meaningful "detection"
+  today the way an old Double Top's neckline level still can be.
+- **Frontend fix required for the chart to actually satisfy the ask**
+  ("when a person sees this pattern on the chart, they should know what
+  pattern it is"): `PatternAnalysis.tsx`'s annotation-drawing effect
+  previously only drew a pattern's text `labels` for the currently
+  **selected** pattern — fine for the old chart-shape patterns (a
+  non-selected one still showed its trendline/zone), but a candlestick
+  pattern has no trendline/zone at all, just a single point in time, so a
+  non-selected candlestick pattern was completely invisible on the chart.
+  Moved `a.labels.forEach(...)` outside the `isSelected` guard — every
+  visible pattern now always gets its name-labeled marker; only the full
+  price-line read-out (breakout/invalidation/SL/targets) stays
+  selected-only, to avoid burying the chart under overlapping horizontal
+  lines when many patterns are visible at once.
+- **Tests**: `tests/test_candlestick_patterns.py` (NEW) — factory
+  registration (old detector keys gone), synthetic positive-path checks for
+  a representative sample across all three files (Marubozu, Standard Doji
+  neutral-with-no-stop, Dragonfly Doji, Hammer 1:2 R/R, Bullish Engulfing,
+  Piercing Line, Tweezer Bottom, Morning Star, Three White Soldiers
+  no-fixed-target, Three Inside Up 1:1.5 R/R), plus a live-data run across
+  all 4 registered detectors and a full `PatternScanner.scan()` call.
+  `tests/test_pattern_scanner.py` needed no logic changes — it already
+  iterated `PatternFactory.list_detectors()` generically, so it transparently
+  now exercises the candlestick detectors instead. It DID need one scope
+  fix: its `include_ai=True` assertion ran at `limit=300` (the same window
+  as the main scan test), which under the candlestick engine now finds
+  ~129 patterns instead of the old ~30-54 — that single assertion measured
+  at **4:42 wall-clock** (5.7s CPU / rest pure NVIDIA API latency across
+  ~129 sequential-batch AI calls), which blew through the 180s-per-file
+  timeout used when running the full test suite and made that one run
+  register as "failed" even though every individual check inside it passed.
+  Not a functional bug — `include_ai=True`'s cost scaling with pattern count
+  is already documented, accepted behavior (see the Pattern Recognition
+  timeout-fix section above) — just a test that needed a smaller window
+  (`limit=60`, ~37 patterns) to stay within a reasonable single-test budget
+  while still verifying the same thing (AI attaches to every pattern found).
+- **Real volume difference found while verifying, not a bug but worth
+  recording**: a single live scan (BTCUSDT/1h/300 candles) now returns
+  ~128 patterns total (50 single + 53 two + 16 three + 12 SMC) vs. the old
+  chart-shape engine's typical 11-31 — expected and correct, not a
+  regression: candlestick patterns are inherently far more frequent than
+  multi-week chart shapes, and this is standard behavior for any real
+  candlestick-pattern scanner (professional platforms show similar
+  density). Confirmed the existing rate-limit/timeout safeguards built for
+  the old pattern module (opt-in `include_ai`, shared AI thread pool,
+  `AI_REQUEST_TIMEOUT_SECONDS`) already absorb this fine — full scan still
+  completed in ~1.7s (fast path) and the `include_ai=True` path still
+  completed successfully in testing, not re-triggering the earlier
+  "scan failing most of the time" timeout issue.
+- Deleted: the 8 old detector files + their now-dead config constants. No
+  test files referenced them by name (they were verified ad-hoc during
+  their own build, per this doc's own earlier notes), so nothing else
+  needed cleanup. No frontend code referenced old `pattern_type` strings
+  either (`pattern_name`/`pattern_type` are rendered generically everywhere)
+  — the only hit for old pattern names anywhere in the frontend was an
+  unrelated prose analogy in the Trend Line tool's help text ("similar to a
+  rising/falling wedge"), left alone.
 
 ---
 

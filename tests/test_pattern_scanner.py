@@ -56,7 +56,17 @@ else:
     print("SKIP: no patterns found this run to explain")
 
 print("\n========== FULL SCAN (include_ai=True, opt-in) ==========\n")
-result_ai = scanner.scan("BTCUSDT", "1h", limit=300, include_ai=True)
+# Deliberately a much smaller limit than the main scan above: the
+# candlestick-pattern engine (2026-07-04) finds far more patterns per scan
+# than the old chart-shape detectors did (~129 vs ~30-54 at limit=300) —
+# at limit=300 this assertion alone took ~4:42 wall-clock (pure NVIDIA API
+# latency across ~129 sequential-batch AI calls, not a bug), which is far
+# past a reasonable single-test budget. A smaller candle window keeps this
+# test verifying the same thing (AI attaches to every pattern found) without
+# the wait — include_ai=True's real-world cost scaling with pattern count is
+# already documented/accepted behavior, not something this test needs to
+# stress at full scale.
+result_ai = scanner.scan("BTCUSDT", "1h", limit=60, include_ai=True)
 for p in result_ai.patterns:
     assert p.ai is not None, "include_ai=True should attach an AI attempt to every pattern"
 print(f"PASS: scan(include_ai=True) attached AI to all {len(result_ai.patterns)} patterns")

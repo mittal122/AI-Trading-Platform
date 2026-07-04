@@ -1,30 +1,26 @@
-from backend.app.services.pattern.channel_rectangle_detector import ChannelRectangleDetector
-from backend.app.services.pattern.cup_handle_detector import CupHandleDetector
-from backend.app.services.pattern.diamond_broadening_detector import DiamondBroadeningDetector
-from backend.app.services.pattern.double_triple_patterns import DoubleTriplePatternDetector
-from backend.app.services.pattern.flag_pennant_detector import FlagPennantDetector
-from backend.app.services.pattern.head_shoulders_detector import HeadShouldersDetector
+from backend.app.services.pattern.single_candle_patterns import SingleCandlePatternDetector
 from backend.app.services.pattern.smc_detector import SMCDetector
-from backend.app.services.pattern.triangle_detector import TriangleDetector
-from backend.app.services.pattern.wedge_detector import WedgeDetector
+from backend.app.services.pattern.three_candle_patterns import ThreeCandlePatternDetector
+from backend.app.services.pattern.two_candle_patterns import TwoCandlePatternDetector
 
 
 class PatternFactory:
     """
-    Registers every classical-pattern + SMC detector (FVG is handled
+    Registers every candlestick-pattern + SMC detector (FVG is handled
     separately by FVGDetector — different return schema, not a
     DetectedPattern). Mirrors StrategyFactory's shape/spirit.
+
+    The classical chart-shape detectors (Double/Triple Top, Head &
+    Shoulders, Triangle, Wedge, Flag/Pennant, Channel/Rectangle, Cup &
+    Handle, Diamond/Broadening) were removed by explicit user request in
+    favor of a full candlestick-pattern engine (~32 patterns across
+    single/two/three-candle families) — see CLAUDE.md.
     """
 
     DETECTORS = {
-        "double_triple": DoubleTriplePatternDetector,
-        "head_shoulders": HeadShouldersDetector,
-        "triangle": TriangleDetector,
-        "wedge": WedgeDetector,
-        "flag_pennant": FlagPennantDetector,
-        "channel_rectangle": ChannelRectangleDetector,
-        "cup_handle": CupHandleDetector,
-        "diamond_broadening": DiamondBroadeningDetector,
+        "single_candle": SingleCandlePatternDetector,
+        "two_candle": TwoCandlePatternDetector,
+        "three_candle": ThreeCandlePatternDetector,
         "smc": SMCDetector,
     }
 

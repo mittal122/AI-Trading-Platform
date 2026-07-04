@@ -457,11 +457,14 @@ export default function PatternAnalysis() {
 
     const visiblePatterns = patterns.filter(p => !hiddenPatternIds.has(p.id))
 
-    // Priority rule: the SELECTED pattern gets its full read-out (trendlines +
-    // breakout/invalidation levels + SL/targets + text labels). Every other
-    // visible pattern gets only its structural shape (trendline + zone) — no
-    // price-line walls, no labels — so having many patterns visible at once
-    // doesn't bury the chart under dozens of overlapping price tags.
+    // Priority rule: EVERY visible pattern always gets its text label marker
+    // on the chart — candlestick patterns are a single point in time, so
+    // without a label there's nothing to see at all for a non-selected one
+    // (unlike chart-shape patterns' trendlines/zones, which still show
+    // structure on their own). The SELECTED pattern additionally gets the
+    // full read-out: breakout/invalidation levels + SL/targets as price
+    // lines — kept selected-only so many visible patterns don't bury the
+    // chart under dozens of overlapping horizontal lines.
     visiblePatterns.forEach(p => {
       const a = p.annotations
       const bullish = p.direction !== 'BEARISH'
@@ -469,6 +472,7 @@ export default function PatternAnalysis() {
       drawTrendlines(chart, a, lineSeriesRef, tl =>
         tl.label.includes('resistance') ? '#ef4444' : tl.label.includes('support') ? '#22c55e' : '#818cf8')
       allRectangles.push(...zonesToRectangles(a, nowIso))
+      a.labels.forEach(l => allLabels.push({ ...l, bullish }))
 
       if (!isSelected) return
 
@@ -485,7 +489,6 @@ export default function PatternAnalysis() {
           title: `${p.pattern_name} Target ${i + 1}`,
         }))
       })
-      a.labels.forEach(l => allLabels.push({ ...l, bullish }))
     })
 
     toolResults.forEach(tool => {

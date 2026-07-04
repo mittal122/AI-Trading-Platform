@@ -39,7 +39,7 @@ def slope_pct_per_bar(fit: TrendlineFit, reference_price: float) -> float:
 
 
 def classify_slope(slope_pct: float, tolerance_pct: float = None) -> str:
-    tol = tolerance_pct if tolerance_pct is not None else pattern_config.TRIANGLE_FLAT_SLOPE_TOLERANCE_PCT
+    tol = tolerance_pct if tolerance_pct is not None else pattern_config.TRENDLINE_FLAT_SLOPE_TOLERANCE_PCT
     if abs(slope_pct) <= tol:
         return "FLAT"
     return "RISING" if slope_pct > 0 else "FALLING"

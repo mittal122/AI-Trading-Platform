@@ -6,55 +6,49 @@ class PatternConfig:
     # "Roughly equal" price tolerance used across multiple pattern families
     PRICE_EQUALITY_TOLERANCE_PCT = 1.5
 
-    # Double / Triple Top / Bottom
-    DT_LOOKBACK_BARS = 400
-    DT_MIN_TROUGH_DEPTH_PCT = 2.0
-    DT_PEAK_TOLERANCE_PCT = 1.5
+    # Default "is this slope flat" tolerance for classify_slope() in
+    # trendline.py — a shared primitive (used by the Trend Line analysis
+    # tool and the candlestick detectors' local_trend() helper), not tied to
+    # any one specific pattern family.
+    TRENDLINE_FLAT_SLOPE_TOLERANCE_PCT = 0.05
 
-    # Head & Shoulders / Inverse
-    HS_LOOKBACK_BARS = 400
-    HS_SHOULDER_TOLERANCE_PCT = 3.0
-    HS_HEAD_MIN_PROMINENCE_PCT = 2.0
+    # ------------------------------------------------------------------
+    # Candlestick patterns (single/two/three-candle formations) — replaced
+    # the classical chart-shape detectors (Double/Triple Top, H&S, Triangle,
+    # Wedge, Flag/Pennant, Channel/Rectangle, Cup & Handle, Diamond/
+    # Broadening) per explicit user request. SMC and FVG are unaffected —
+    # different feature, not a "chart shape" detector.
+    # ------------------------------------------------------------------
 
-    # Triangles (Ascending / Descending / Symmetrical)
-    TRIANGLE_LOOKBACK_BARS = 300
-    TRIANGLE_MIN_TOUCHES_PER_SIDE = 2
-    TRIANGLE_FLAT_SLOPE_TOLERANCE_PCT = 0.05
-    TRIANGLE_MIN_CONVERGENCE_PCT = 30.0
+    # How far back to scan for candlestick pattern instances. Deliberately
+    # much shorter than the old chart-shape lookbacks (300-1000 bars) —
+    # candlestick patterns are short-term signals; a Hammer from 800 candles
+    # ago is not a meaningful "detection" today the way an old Double Top's
+    # neckline level can still be.
+    CANDLESTICK_LOOKBACK_BARS = 150
 
-    # Wedges (Rising / Falling)
-    WEDGE_LOOKBACK_BARS = 300
-    WEDGE_MIN_TOUCHES_PER_SIDE = 2
-    WEDGE_MIN_CONVERGENCE_PCT = 20.0
+    # Body/wick ratio thresholds, straight from standard (Nison-style)
+    # candlestick definitions.
+    CANDLESTICK_WICK_TOLERANCE_PCT = 5.0        # Marubozu: max wick as % of total range
+    CANDLESTICK_DOJI_BODY_MAX_PCT = 5.0         # Doji family: max body as % of total range
+    CANDLESTICK_LONG_WICK_MIN_PCT = 90.0        # Dragonfly/Gravestone: min opposite wick as % of range
+    CANDLESTICK_WICK_TO_BODY_RATIO = 2.0        # Hammer/Hanging Man/Inverted Hammer/Shooting Star/Spinning Top
+    CANDLESTICK_MIDPOINT_THRESHOLD = 0.5        # Piercing Line / Dark Cloud Cover
+    CANDLESTICK_EQUAL_LEVEL_TOLERANCE_PCT = 0.15  # Tweezer Top/Bottom "same" high/low
+    CANDLESTICK_GAP_MIN_PCT = 0.05              # Kickers: min % gap between C1 and C2
+    CANDLESTICK_VOLUME_MULTIPLIER = 1.0         # Kickers/Engulfing: C2 volume > C1 volume
+    CANDLESTICK_STAR_BODY_MAX_PCT = 30.0        # Morning/Evening Star: max middle-candle body vs C1/C3
+    CANDLESTICK_SOLDIER_CROW_MIN_ATR_MULT = 0.5  # Three White Soldiers/Black Crows: min body size vs ATR
 
-    # Flags / Pennants — inherently short-lived by definition, lookback
-    # intentionally NOT scaled up with the rest (a "flag" spanning hundreds
-    # of candles isn't a flag anymore under any reasonable definition)
-    FLAGPOLE_LOOKBACK_BARS = 40
-    FLAGPOLE_MIN_MOVE_PCT = 5.0
-    FLAG_MIN_CONSOLIDATION_BARS = 5
-    FLAG_MAX_CONSOLIDATION_BARS = 30
-    FLAG_MAX_RETRACE_PCT = 50.0
+    # Trend-context filter (many patterns require "trend is up/down" first) —
+    # reuses the same least-squares trendline primitive as the Trend Line
+    # analysis tool, just over a shorter local window.
+    CANDLESTICK_TREND_LOOKBACK_BARS = 20
+    CANDLESTICK_TREND_FLAT_TOLERANCE_PCT = 0.03
 
-    # Rectangle / Channel
-    CHANNEL_LOOKBACK_BARS = 300
-    CHANNEL_MIN_TOUCHES_PER_SIDE = 2
-
-    # Cup & Handle / Rounding Bottom — also intentionally bounded (a cup
-    # spanning the full loaded history isn't a cup, it's just noise); modest
-    # bump only
-    CUP_MIN_BARS = 30
-    CUP_MAX_BARS = 250
-    CUP_DEPTH_MIN_PCT = 8.0
-    CUP_DEPTH_MAX_PCT = 50.0
-    CUP_RIM_TOLERANCE_PCT = 5.0
-    HANDLE_MAX_BARS = 40
-    HANDLE_MAX_RETRACE_PCT = 50.0
-
-    # Diamond / Broadening Formation
-    BROADENING_LOOKBACK_BARS = 300
-    BROADENING_MIN_TOUCHES_PER_SIDE = 2
-    DIAMOND_LOOKBACK_BARS = 300
+    # Default risk/reward multiple for patterns whose target is stated as a
+    # ratio ("1:2 R/R") rather than a specific level.
+    CANDLESTICK_DEFAULT_RR = 2.0
 
     # Fair Value Gap — scaled to the full per-request ceiling (1000, matching
     # Binance/backend's own per-call max) so "all historical + unfilled FVGs"
