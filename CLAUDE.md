@@ -1649,6 +1649,54 @@ rows sorted purely by confidence.
   values). Backend scan: ~11-19 chart shapes per 1000-candle scan vs 380+
   candlesticks — grouping/exemption is what makes them findable.
 
+### Advanced Market Dashboard (2026-07-05)
+
+User: restructure the whole Dashboard into an advanced market-overview
+dashboard with a watchlist and "real information" sections — researched
+what traders/institutions actually monitor, then built the subset that
+Binance's keyless public API can genuinely supply (no faked data):
+
+- **Backend** — `BinanceProvider` gained 4 methods + `MarketService`
+  passthroughs + 5 endpoints (`backend/app/api/v1/market.py`, schemas in
+  `schemas/market_overview.py`):
+  - `GET /market/overview` — one cached 24h-ticker pull (30s TTL,
+    `_TICKER_CACHE_TTL_SECONDS`) → BTC/ETH snapshot, market breadth
+    (advancers/decliners), avg 24h move, total turnover, top
+    gainers/losers/volume leaders. Filters: ≥$1M 24h quote volume
+    (`_OVERVIEW_MIN_QUOTE_VOLUME` — kills ~440 dead micro-caps of 629
+    pairs), leveraged tokens (UP/DOWN/BULL/BEAR suffixes), and
+    stablecoin-vs-USDT pairs (`_STABLE_BASES` — USDCUSDT otherwise
+    permanently tops volume leaders).
+  - `GET /market/watchlist?symbols=` — 24h stats for exactly those symbols.
+  - `GET /market/depth-pressure` — order-book imbalance from a 100-level
+    book snapshot: bid vs ask resting notional ratio + biggest single wall
+    per side.
+  - `GET /market/buy-pressure` — taker-buy share of volume over last N
+    candles, read from raw klines field 9 (the long-documented "Binance
+    sends taker-buy volume but our OHLCV path drops it" gap, finally used).
+  - `GET /market/funding` — perp funding rate + annualized + mark price via
+    `client.futures_mark_price` (public fapi, no key; verified working).
+    Degrades to null for symbols without perps.
+- **Frontend** — `Dashboard.tsx` fully restructured ("Market Dashboard"):
+  overview strip (BTC, ETH, breadth w/ risk-on/off tilt, avg move, total
+  volume) · persisted watchlist (add via SymbolSearchInput, ✕ remove,
+  click-to-select; each row: price, 24h%, 24h range-position meter, volume,
+  and a BUY/SELL radar badge) · selected-coin live chart + 3 order-flow
+  cards (Order-Book Pressure meter + walls, Aggressive Buy Flow % + 10-bar
+  history, Funding w/ crowded-long/short read — each with a ⓘ tooltip
+  explaining the signal in plain language) · Market Movers
+  (gainers/losers/volume tabs, click-to-load) · existing SignalCard +
+  IndicatorPanel kept at the bottom. Signal Radar = one `getSignal('rsi',
+  coin, '15m')` per watchlist coin every 60s (parallel, allSettled).
+  Poll cadences: overview/watchlist 20s, order-flow 10s, radar 60s.
+- `tests/test_market_overview.py` (NEW) — tickers + cache effectiveness,
+  depth sanity (uncrossed book, ratio in [0,1]), buy-pressure bounds,
+  funding graceful-None for unknown symbols.
+- Verified live in headless Chrome: all sections render with real data
+  (breadth 96▲/87▼ "risk-on tilt", SOL order book 59% bid-side, 49.2%
+  aggressive buyers, funding +1.9% annualized "longs paying", VANRY +58%
+  top gainer), watchlist click switches the whole selected-coin panel.
+
 ---
 
 ## Immediate Next Task

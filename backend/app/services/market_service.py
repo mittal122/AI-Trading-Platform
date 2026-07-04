@@ -32,6 +32,18 @@ class MarketService:
     def get_symbols(self):
         return self.provider.get_symbols()
 
+    def get_tickers_24h(self, quote_asset: str = "USDT"):
+        return self.provider.get_tickers_24h(quote_asset=quote_asset)
+
+    def get_depth_summary(self, symbol: str, limit: int = 100):
+        return self.provider.get_depth_summary(symbol=symbol, limit=limit)
+
+    def get_buy_pressure(self, symbol: str, interval: str, limit: int = 20):
+        return self.provider.get_buy_pressure(symbol=symbol, interval=interval, limit=limit)
+
+    def get_funding(self, symbol: str):
+        return self.provider.get_funding(symbol=symbol)
+
     def get_supported_intervals(self):
         return self.provider.get_supported_intervals()
 

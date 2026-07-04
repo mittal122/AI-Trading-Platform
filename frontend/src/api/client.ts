@@ -17,6 +17,47 @@ export interface SymbolsResponse {
 
 export const getSymbols = () => api.get<SymbolsResponse>('/market/symbols')
 
+// ── Market overview / order-flow (advanced Dashboard) ───────────────────────
+
+export interface Ticker24h {
+  symbol: string; last_price: number; price_change_pct: number
+  high: number; low: number; quote_volume: number; trades: number
+}
+
+export interface MarketOverview {
+  btc: Ticker24h | null; eth: Ticker24h | null
+  advancers: number; decliners: number; avg_change_pct: number
+  total_quote_volume: number; counted_pairs: number
+  top_gainers: Ticker24h[]; top_losers: Ticker24h[]; volume_leaders: Ticker24h[]
+}
+
+export interface DepthPressure {
+  symbol: string; bid_notional: number; ask_notional: number; bid_ratio: number
+  best_bid: number; best_ask: number
+  biggest_bid_wall_price: number; biggest_bid_wall_notional: number
+  biggest_ask_wall_price: number; biggest_ask_wall_notional: number; levels: number
+}
+
+export interface BuyPressure {
+  symbol: string; interval: string; candles: number
+  buy_ratio: number; recent_ratios: number[]
+}
+
+export interface Funding {
+  symbol: string; funding_rate: number; funding_rate_annualized_pct: number
+  mark_price: number; next_funding_time: number
+}
+
+export const getMarketOverview = () => api.get<MarketOverview>('/market/overview')
+export const getWatchlistTickers = (symbols: string[]) =>
+  api.get<{ tickers: Ticker24h[] }>('/market/watchlist', { params: { symbols: symbols.join(',') } })
+export const getDepthPressure = (symbol: string) =>
+  api.get<DepthPressure>('/market/depth-pressure', { params: { symbol } })
+export const getBuyPressure = (symbol: string, interval = '5m') =>
+  api.get<BuyPressure>('/market/buy-pressure', { params: { symbol, interval } })
+export const getFunding = (symbol: string) =>
+  api.get<Funding | null>('/market/funding', { params: { symbol } })
+
 export interface Indicators {
   price: number; sma20: number; ema20: number; rsi14: number
   macd: number; signal: number; histogram: number
