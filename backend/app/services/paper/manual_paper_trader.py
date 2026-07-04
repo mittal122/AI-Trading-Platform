@@ -85,8 +85,13 @@ class ManualPaperTrader:
         return order
 
     def status(self) -> ManualPaperStatus:
-        open_value = sum(o.quantity * o.current_price for o in self._open.values())
-        equity = self.balance + open_value
+        # This trader settles PnL on close (balance is never debited when a
+        # position opens), so equity = balance + open unrealized PnL. The
+        # previous `balance + quantity*price` added the full position
+        # NOTIONAL on top of an undebited balance — opening a $500 position
+        # instantly showed +$500 equity out of thin air.
+        open_upnl = sum(o.unrealized_pnl for o in self._open.values())
+        equity = self.balance + open_upnl
         return ManualPaperStatus(
             balance=round(self.balance, 4),
             equity=round(equity, 4),

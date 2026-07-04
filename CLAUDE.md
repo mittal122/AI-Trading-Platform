@@ -1483,6 +1483,45 @@ around the exact formation candles). All 3 audit suites (70 checks) + full
 47-file suite pass; `tsc --noEmit` clean. Tests now reference
 `pattern_config.PATTERN_SCAN_MIN_CONFIDENCE` instead of a hardcoded 40.
 
+### Dashboard auto-scan, AI Chat removed, Paper Trading manual-entry wiring (2026-07-05)
+
+Three user requests, plus one real accounting bug found while verifying:
+
+- **Pattern Dashboard auto-scans on visit** (`useEffect` on `[symbol]`) —
+  the "Scan All Timeframes" button remains as a manual refresh. Verified in
+  headless Chrome: page shows "Scanning…" immediately on load and renders
+  Bullish/Bearish sections with zero clicks.
+- **AI Chat page removed from the website**: `frontend/src/pages/AIChat.tsx`
+  deleted, `/chat` route + Sidebar entry removed, dead `sendChat`/
+  `ChatMessage`/`ChatResponse` bindings dropped from `client.ts`. The
+  backend `POST /ai/chat` endpoint deliberately stays (harmless; API
+  consumers unaffected) — this was a frontend removal only.
+- **Paper Trading Manual Trade Entry, wired properly**:
+  - Entry auto-loads from the live market: polls `GET /market/live` every
+    5s for the selected symbol; the Entry field tracks it (green border +
+    "● live" badge) until the user types their own value, then an
+    "↻ use live" link hands it back to the feed. Re-syncs automatically on
+    symbol change and after placing an order. Header shows
+    "{symbol} live: $X". Watch out for HMR staleness when live-verifying
+    edits to this page — a browser tab opened mid-edit showed the old
+    module; a fresh load behaved correctly.
+  - Direction-aware level validation surfaced inline (BUY: SL < Entry <
+    Target; SELL mirrored — the same rule `ManualPaperTrader.
+    _validate_levels` enforces server-side), with a visible hint explaining
+    WHY the button is disabled instead of a rejected request after the fact.
+  - **Real bug fixed** in `ManualPaperTrader.status()`: equity was
+    `balance + quantity×price` — the full position NOTIONAL added on top of
+    an undebited balance (this trader settles PnL on close; balance is
+    never debited at open), so opening a $500 position instantly showed
+    +$500 equity out of thin air. Now `equity = balance + unrealized PnL`.
+    New `tests/test_manual_paper_trader.py` (level validation ×4, equity
+    accounting, close-books-PnL, SELL-side pnl/hit detection) — the module
+    never had a dedicated test.
+  - End-to-end verified through the real UI: invalid levels → hint + button
+    disabled; valid levels → RR `1:2.00` + enabled; clicked Place → order
+    #1 placed, MONITORING row appeared, and `/paper/orders` showed
+    equity ≈ balance (10000.09, not the old phantom 10500).
+
 ---
 
 ## Immediate Next Task

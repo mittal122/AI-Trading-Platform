@@ -87,9 +87,6 @@ export interface PaperStatus {
   last_signal?: string; last_price?: number; candles_processed: number
 }
 
-export interface ChatMessage { role: 'user' | 'assistant'; content: string }
-export interface ChatResponse { reply: string }
-
 // ── API calls ────────────────────────────────────────────────────────────────
 
 export interface Candle {
@@ -284,9 +281,6 @@ export const startPaper = (body: {
 }) => api.post<PaperStatus>('/paper/start', body)
 
 export const stopPaper = () => api.post('/paper/stop')
-
-export const sendChat = (message: string, history: ChatMessage[]) =>
-  api.post<ChatResponse>('/ai/chat', { message, history })
 
 // ── Manual one-click paper trade ─────────────────────────────────────────────
 

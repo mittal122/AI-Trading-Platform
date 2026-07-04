@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getPaperStatus, startPaper, stopPaper, getManualOrders, getTradeHistory, placePaperOrder } from '../api/client'
+import { getPaperStatus, startPaper, stopPaper, getManualOrders, getTradeHistory, getLiveMarket, placePaperOrder } from '../api/client'
 import type { PaperStatus, ManualPaperStatus, ManualOrder, TradeHistoryItem } from '../api/client'
 import SymbolSearchInput from '../components/SymbolSearchInput'
 import { usePersistedState } from '../hooks/usePersistedState'
@@ -44,11 +44,42 @@ export default function PaperTrade() {
   const [placing, setPlacing] = useState(false)
   const [placeResult, setPlaceResult] = useState<{ ok: boolean; msg: string } | null>(null)
 
+  // Live market price for the selected symbol — the Entry field auto-fills
+  // and keeps tracking it until the user types their own value ("dirty");
+  // the ● Live badge re-syncs it on click.
+  const [livePrice, setLivePrice] = useState<number | null>(null)
+  const [entryDirty, setEntryDirty] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    setLivePrice(null)
+    setEntryDirty(false)  // new symbol — hand Entry back to the live feed
+    async function tick() {
+      try {
+        const res = await getLiveMarket(entrySymbol, '1m')
+        if (!cancelled) setLivePrice(res.data.close)
+      } catch { /* transient — next tick retries */ }
+    }
+    tick()
+    const id = setInterval(tick, 5_000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [entrySymbol])
+
+  useEffect(() => {
+    if (!entryDirty && livePrice !== null) setEntryPrice(String(livePrice))
+  }, [livePrice, entryDirty])
+
   const entryNum = parseFloat(entryPrice)
   const stopLossNum = parseFloat(stopLossPrice)
   const targetNum = parseFloat(targetPrice)
   const liveRR = calcRR(entryNum, stopLossNum, targetNum)
-  const formValid = Number.isFinite(entryNum) && Number.isFinite(stopLossNum) && Number.isFinite(targetNum) && liveRR !== null
+  const allFilled = Number.isFinite(entryNum) && Number.isFinite(stopLossNum) && Number.isFinite(targetNum)
+  // Same ordering rule the backend enforces — surfaced here so the user sees
+  // WHY the button is disabled instead of a rejected request after the fact.
+  const levelsValid = direction === 'BUY'
+    ? stopLossNum < entryNum && entryNum < targetNum
+    : targetNum < entryNum && entryNum < stopLossNum
+  const formValid = allFilled && levelsValid && liveRR !== null
 
   async function placeManualOrder() {
     setPlacing(true); setPlaceResult(null)
@@ -59,7 +90,8 @@ export default function PaperTrade() {
         risk_percent: Number(riskPercent) || 1.0, interval: '1m',
       })
       setPlaceResult({ ok: true, msg: `Order #${res.data.id} placed — ${res.data.quantity.toFixed(6)} ${entrySymbol} @ $${res.data.entry.toFixed(2)}` })
-      setEntryPrice(''); setStopLossPrice(''); setTargetPrice('')
+      setStopLossPrice(''); setTargetPrice('')
+      setEntryDirty(false)  // hand Entry back to the live feed for the next order
       await refreshManual()
     } catch (e: any) {
       setPlaceResult({ ok: false, msg: e?.response?.data?.detail ?? 'Failed to place order' })
@@ -163,7 +195,14 @@ export default function PaperTrade() {
 
       {/* Manual trade entry — Entry/Stop Loss/Target with a live RR ratio */}
       <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5 space-y-4">
-        <h2 className="text-sm font-semibold text-slate-300">Manual Trade Entry</h2>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h2 className="text-sm font-semibold text-slate-300">Manual Trade Entry</h2>
+          {livePrice !== null && (
+            <span className="text-xs text-slate-500">
+              {entrySymbol} live: <span className="text-white font-medium">${livePrice.toLocaleString()}</span>
+            </span>
+          )}
+        </div>
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
           <div>
             <label className="text-xs text-slate-500 mb-1 block">Symbol</label>
@@ -178,9 +217,21 @@ export default function PaperTrade() {
             </select>
           </div>
           <div>
-            <label className="text-xs text-slate-500 mb-1 block">Entry</label>
-            <input type="number" value={entryPrice} onChange={e => setEntryPrice(e.target.value)} placeholder="0.00"
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500" />
+            <label className="text-xs text-slate-500 mb-1 flex items-center justify-between">
+              <span>Entry</span>
+              {entryDirty ? (
+                <button onClick={() => setEntryDirty(false)} title="Re-sync Entry to the live market price"
+                  className="text-[10px] text-indigo-400 hover:text-indigo-300">↻ use live</button>
+              ) : (
+                <span className="text-[10px] text-green-400" title="Entry tracks the live market price until you type your own">● live</span>
+              )}
+            </label>
+            <input type="number" value={entryPrice}
+              onChange={e => { setEntryDirty(true); setEntryPrice(e.target.value) }}
+              placeholder={livePrice !== null ? String(livePrice) : 'loading…'}
+              className={`w-full bg-[#0f1117] border rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 ${
+                entryDirty ? 'border-[#2a2d3e]' : 'border-green-500/30'
+              }`} />
           </div>
           <div>
             <label className="text-xs text-slate-500 mb-1 block">Stop Loss</label>
@@ -210,6 +261,13 @@ export default function PaperTrade() {
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg">
             {placing ? 'Placing…' : `Place ${direction} Order`}
           </button>
+          {allFilled && !levelsValid && (
+            <span className="text-xs text-yellow-400">
+              ⚠ {direction === 'BUY'
+                ? 'For BUY: Stop Loss < Entry < Target'
+                : 'For SELL: Target < Entry < Stop Loss'}
+            </span>
+          )}
           {placeResult && (
             <span className={`text-xs ${placeResult.ok ? 'text-green-400' : 'text-red-400'}`}>
               {placeResult.ok ? '✓ ' : '⚠ '}{placeResult.msg}

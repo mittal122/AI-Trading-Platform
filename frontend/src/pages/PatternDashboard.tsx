@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { getPatternDashboard } from '../api/client'
 import type { PatternDashboardRow } from '../api/client'
@@ -32,6 +32,11 @@ export default function PatternDashboard() {
       setLoading(false)
     }
   }
+
+  // Auto-scan on page visit and whenever the symbol changes — no manual
+  // "Scan All Timeframes" click required (the button stays as a manual
+  // refresh).
+  useEffect(() => { load() }, [symbol])  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Only confirmed signals — DEVELOPING/BROKEN rows are noise for a "what's
   // actionable right now" dashboard. NEUTRAL-direction patterns (Doji,
@@ -69,7 +74,7 @@ export default function PatternDashboard() {
       {confirmedRows.length === 0 ? (
         <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-8 text-center text-slate-500 text-sm">
           {loading ? 'Scanning every timeframe — this calls AI for every pattern found, can take a minute…'
-            : rows.length === 0 ? 'No patterns yet — click "Scan All Timeframes".'
+            : rows.length === 0 ? 'No recent patterns found — the scan runs automatically; "Scan All Timeframes" re-runs it.'
             : 'No CONFIRMED signals right now — patterns are still DEVELOPING or were BROKEN.'}
         </div>
       ) : (

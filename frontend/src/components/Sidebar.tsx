@@ -5,7 +5,6 @@ const LINKS = [
   { to: '/backtest',  label: 'Backtest',   icon: '↺'  },
   { to: '/portfolio', label: 'Portfolio',  icon: '◈'  },
   { to: '/paper',     label: 'Paper Trade',icon: '◻'  },
-  { to: '/chat',      label: 'AI Chat',    icon: '✦'  },
   { to: '/patterns',  label: 'Retail Dashboard', icon: '◭'  },
   { to: '/patterns/dashboard', label: 'Pattern Dashboard', icon: '☰'  },
   { to: '/settings',  label: 'Settings',   icon: '⚙'  },
