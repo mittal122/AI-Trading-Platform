@@ -126,6 +126,7 @@ def resolve_forward_status(
     breakout_level: float,
     invalidation_level: float,
     atr: float,
+    window_bars: int | None = None,
 ) -> PatternStatus:
     """Resolve a pattern's status against the candles that came AFTER it —
     not against today's price, which is meaningless for a pattern formed
@@ -144,7 +145,10 @@ def resolve_forward_status(
     cfg = pattern_config
     margin = cfg.BREAKOUT_CONFIRMATION_ATR_MULT * atr
     n = len(df)
-    window_end = min(n, end_idx + 1 + cfg.CANDLESTICK_CONFIRMATION_WINDOW_BARS)
+    # Chart-shape patterns (H&S, Double Tops) pass a wider window than the
+    # candlestick default — larger formations take longer to play out.
+    window = window_bars or cfg.CANDLESTICK_CONFIRMATION_WINDOW_BARS
+    window_end = min(n, end_idx + 1 + window)
 
     for i in range(end_idx + 1, window_end):
         high = float(df["high"].iloc[i])
@@ -160,7 +164,7 @@ def resolve_forward_status(
             if low <= breakout_level - margin:
                 return PatternStatus.CONFIRMED
 
-    still_in_window = (n - (end_idx + 1)) < cfg.CANDLESTICK_CONFIRMATION_WINDOW_BARS
+    still_in_window = (n - (end_idx + 1)) < window
     return PatternStatus.DEVELOPING if still_in_window else PatternStatus.BROKEN
 
 

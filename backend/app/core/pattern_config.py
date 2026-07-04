@@ -77,6 +77,53 @@ class PatternConfig:
     # ratio ("1:2 R/R") rather than a specific level.
     CANDLESTICK_DEFAULT_RR = 2.0
 
+    # ------------------------------------------------------------------
+    # Classical chart-shape patterns — restored 2026-07-05 (user asked for
+    # Double Top/Bottom, H&S, Wedges, Rectangles, Pennants, Triangles drawn
+    # on the chart; the detectors deleted on 2026-07-04 were brought back
+    # from git history and upgraded to the forward-resolution status system).
+    # ------------------------------------------------------------------
+
+    # Double / Triple Top / Bottom
+    DT_LOOKBACK_BARS = 400
+    DT_MIN_TROUGH_DEPTH_PCT = 2.0
+    DT_PEAK_TOLERANCE_PCT = 1.5
+
+    # Head & Shoulders / Inverse
+    HS_LOOKBACK_BARS = 400
+    HS_SHOULDER_TOLERANCE_PCT = 3.0
+    HS_HEAD_MIN_PROMINENCE_PCT = 2.0
+
+    # Triangles (Ascending / Descending / Symmetrical)
+    TRIANGLE_LOOKBACK_BARS = 300
+    TRIANGLE_MIN_TOUCHES_PER_SIDE = 2
+    TRIANGLE_MIN_CONVERGENCE_PCT = 30.0
+
+    # Wedges (Rising / Falling)
+    WEDGE_LOOKBACK_BARS = 300
+    WEDGE_MIN_TOUCHES_PER_SIDE = 2
+    WEDGE_MIN_CONVERGENCE_PCT = 20.0
+
+    # Flags / Pennants — inherently short-lived by definition; a "flag"
+    # spanning hundreds of candles isn't a flag anymore
+    FLAGPOLE_LOOKBACK_BARS = 40
+    FLAGPOLE_MIN_MOVE_PCT = 5.0
+    FLAG_MIN_CONSOLIDATION_BARS = 5
+    FLAG_MAX_CONSOLIDATION_BARS = 30
+    FLAG_MAX_RETRACE_PCT = 50.0
+
+    # Rectangle / Channel
+    CHANNEL_LOOKBACK_BARS = 300
+    CHANNEL_MIN_TOUCHES_PER_SIDE = 2
+
+    # Forward-resolution window for HISTORICALLY-anchored chart shapes
+    # (Double/Triple Top, H&S) — larger formations take longer to play out
+    # than the candlestick default of 12 bars. Live-edge shapes (Triangle,
+    # Wedge, Rectangle, Flag/Pennant) still use current-price status: their
+    # formation always ends at the latest candle, so "is price breaking out
+    # NOW" is exactly the right question for them.
+    CHART_PATTERN_CONFIRMATION_WINDOW_BARS = 40
+
     # Fair Value Gap — scaled to the full per-request ceiling (1000, matching
     # Binance/backend's own per-call max) so "all historical + unfilled FVGs"
     # genuinely covers everything fetched, not just a trailing slice of it

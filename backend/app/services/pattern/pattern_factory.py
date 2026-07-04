@@ -1,26 +1,41 @@
+from backend.app.services.pattern.channel_rectangle_detector import ChannelRectangleDetector
+from backend.app.services.pattern.double_triple_patterns import DoubleTriplePatternDetector
+from backend.app.services.pattern.flag_pennant_detector import FlagPennantDetector
+from backend.app.services.pattern.head_shoulders_detector import HeadShouldersDetector
 from backend.app.services.pattern.single_candle_patterns import SingleCandlePatternDetector
 from backend.app.services.pattern.smc_detector import SMCDetector
 from backend.app.services.pattern.three_candle_patterns import ThreeCandlePatternDetector
+from backend.app.services.pattern.triangle_detector import TriangleDetector
 from backend.app.services.pattern.two_candle_patterns import TwoCandlePatternDetector
+from backend.app.services.pattern.wedge_detector import WedgeDetector
 
 
 class PatternFactory:
     """
-    Registers every candlestick-pattern + SMC detector (FVG is handled
-    separately by FVGDetector — different return schema, not a
-    DetectedPattern). Mirrors StrategyFactory's shape/spirit.
+    Registers every pattern detector + SMC (FVG is handled separately by
+    FVGDetector — different return schema, not a DetectedPattern). Mirrors
+    StrategyFactory's shape/spirit.
 
-    The classical chart-shape detectors (Double/Triple Top, Head &
-    Shoulders, Triangle, Wedge, Flag/Pennant, Channel/Rectangle, Cup &
-    Handle, Diamond/Broadening) were removed by explicit user request in
-    favor of a full candlestick-pattern engine (~32 patterns across
-    single/two/three-candle families) — see CLAUDE.md.
+    Two families coexist:
+    - Candlestick formations (single/two/three-candle, ~32 patterns) —
+      short-term signals, fully scanned across the loaded history.
+    - Classical chart shapes (Double/Triple Top, H&S, Triangle, Wedge,
+      Flag/Pennant, Channel/Rectangle) — restored 2026-07-05 from git
+      history at user request; drawn on the chart via their trendline
+      annotations (necklines, converging boundary lines). Cup & Handle and
+      Diamond/Broadening remain deleted — not requested back.
     """
 
     DETECTORS = {
         "single_candle": SingleCandlePatternDetector,
         "two_candle": TwoCandlePatternDetector,
         "three_candle": ThreeCandlePatternDetector,
+        "double_triple": DoubleTriplePatternDetector,
+        "head_shoulders": HeadShouldersDetector,
+        "triangle": TriangleDetector,
+        "wedge": WedgeDetector,
+        "flag_pennant": FlagPennantDetector,
+        "channel_rectangle": ChannelRectangleDetector,
         "smc": SMCDetector,
     }
 

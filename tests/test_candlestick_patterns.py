@@ -49,8 +49,12 @@ def _find(results, pattern_type):
 
 
 print("\n========== FACTORY REGISTRATION ==========\n")
-assert set(PatternFactory.list_detectors()) == {"single_candle", "two_candle", "three_candle", "smc"}
-print("PASS: old chart-shape detectors gone, candlestick + SMC detectors registered")
+assert set(PatternFactory.list_detectors()) == {
+    "single_candle", "two_candle", "three_candle",
+    "double_triple", "head_shoulders", "triangle", "wedge",
+    "flag_pennant", "channel_rectangle", "smc",
+}
+print("PASS: candlestick + restored chart-shape + SMC detectors all registered")
 
 print("\n========== SINGLE-CANDLE: Marubozu (no trend requirement) ==========\n")
 df = _base_df(direction="FLAT")

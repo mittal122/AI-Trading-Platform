@@ -1551,6 +1551,54 @@ always fresh.)
   wheel-zoomed + axis-dragged arbitrarily → one Reset-view click restored
   the full auto-fitted view.
 
+### Classical chart-shape patterns RESTORED (2026-07-05)
+
+User (with a classic patterns cheat-sheet image): wants Double Top/Bottom,
+Head & Shoulders, Rising/Falling Wedge, Rectangles, Pennants, and
+Ascending/Descending/Symmetrical Triangles detected and DRAWN on the
+Retail Dashboard chart. These are 6 of the 8 chart-shape detectors that
+were deleted at the user's own request on 2026-07-04 — restored from git
+history (`git show 8bd6909^:...`) rather than rebuilt, then upgraded to
+the current status system. Cup & Handle and Diamond/Broadening remain
+deleted (not requested back).
+
+- **Both families now coexist** in `PatternFactory` (10 detectors:
+  3 candlestick + 6 chart-shape + SMC). The `test_candlestick_patterns.py`
+  factory-set assertion updated accordingly.
+- **Status split by anchor type** (the key design decision):
+  - Double/Triple Top/Bottom + H&S detect at HISTORICAL positions anywhere
+    in their 400-bar lookback → upgraded to `resolve_forward_status()` with
+    a wider window (`CHART_PATTERN_CONFIRMATION_WINDOW_BARS=40`; larger
+    formations take longer to play out than candlesticks' 12), and their
+    confidence breakout-strength component now uses `STATUS_STRENGTH_SCORE`.
+  - Triangle/Wedge/Channel-Rectangle/Flag-Pennant anchor to the LIVE EDGE
+    (`end_idx = len(window)-1` — they fit trendlines through recent swings
+    ending now), so forward resolution would never see any "following"
+    candles: they KEEP `status_from_breakout(current_price=...)`, which is
+    exactly right for them ("is price breaking out NOW").
+- Old config constants restored verbatim (`DT_*`, `HS_*`, `TRIANGLE_*`,
+  `WEDGE_*`, `FLAGPOLE_*`/`FLAG_*`, `CHANNEL_*`).
+  `classify_slope()`'s default tolerance works unchanged — the renamed
+  `TRENDLINE_FLAT_SLOPE_TOLERANCE_PCT` (0.05) has the same value the old
+  triangle-specific constant had.
+- **Drawing needed zero frontend work**: the restored detectors emit
+  `TrendlineAnnotation`s (necklines, converging resistance/support lines)
+  which `drawTrendlines` already renders for every visible pattern —
+  labels `resistance`→red, `support`→green, `neckline`/`flagpole`→indigo.
+  Flag/Pennant also emits its consolidation ZoneAnnotation (drawn box).
+- `tests/test_chart_shape_patterns.py` (NEW) — synthetic Double Top
+  asserting BEARISH + forward-resolved CONFIRMED + neckline annotation,
+  plus live-data smoke over all 6 families asserting every result carries
+  at least one drawable annotation (trendline or zone).
+- Verified live (headless Chrome, ETHUSDT/1h): list shows Triple Bottom
+  (TOP, 80%), Double Bottom, Head & Shoulders, Rising Wedge alongside
+  candlesticks; selecting Double Bottom draws the green neckline/breakout
+  line, Trough markers at both bottoms, Targets 1-3, and the red
+  stop/invalidation line — matching the user's reference diagram
+  (neckline/entry/stop/target). Backend spot-check found shapes on 7 of 9
+  symbol/interval combos tested (H&S, wedges, flags, pennant, triangle,
+  rectangle all firing).
+
 ---
 
 ## Immediate Next Task
