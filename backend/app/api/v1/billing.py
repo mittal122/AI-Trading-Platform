@@ -54,8 +54,9 @@ async def stripe_webhook(request: Request) -> dict:
 
     try:
         event = stripe_service.verify_webhook(payload, signature)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Webhook verification failed: {e}")
+    except Exception:
+        # Don't echo the verification internals back to the caller.
+        raise HTTPException(status_code=400, detail="Webhook verification failed")
 
     await stripe_service.handle_webhook_event(event)
     return {"received": True}

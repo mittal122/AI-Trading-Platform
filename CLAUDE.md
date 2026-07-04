@@ -1697,6 +1697,60 @@ Binance's keyless public API can genuinely supply (no faked data):
   aggressive buyers, funding +1.9% annualized "longs paying", VANRY +58%
   top gainer), watchlist click switches the whole selected-coin panel.
 
+### Security audit + hardening pass (2026-07-05)
+
+User asked: is it production-ready and secure? Honest verdict: NOT
+production-ready for a public deployment (the API has no login — Phase 10
+built JWT auth backend-side but the frontend never got a login UI), but the
+application code itself audited clean. Two parallel Explore sweeps
+(backend constructs/SQL/auth/secrets/rate-limit, frontend/deploy XSS/
+storage/docker/git) found NO injection, NO XSS, NO raw SQL, NO hardcoded
+secrets, clean git history, sound crypto. All real issues were deployment
+posture + the auth gap. Fixed everything fixable without building a login
+system:
+
+- **Admin-token gate** (`backend/app/api/deps.py:require_admin` +
+  `core/security_config.py`) — money-critical endpoints (save/delete
+  Binance keys, live-trading start/stop, trades delete-all) require an
+  `X-Admin-Token` header when `ADMIN_API_TOKEN` is set, open otherwise
+  (single-operator localhost default preserved). Constant-time compared
+  (`hmac.compare_digest`). Frontend: axios request interceptor attaches the
+  token from localStorage (`client.ts` `getAdminToken`/`setAdminToken`),
+  set once via a new Settings card — so a locked deployment's whole UI keeps
+  working. Verified live: 401 without/wrong token, 200 with correct,
+  read-only + market endpoints stay open.
+- **Generic error responses** (`main.py` global `Exception` handler) — logs
+  the full traceback server-side, returns `{"detail":"Internal server
+  error"}` unless `DEBUG_ERRORS=true`. Closed the specific webhook + AI
+  `f"...{exc}"` leaks; kept intentional operator messages (RuntimeError
+  "NVIDIA_API_KEY not set", live-trading "already running").
+- **Security headers middleware** (`main.py SecurityHeadersMiddleware`) —
+  X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy,
+  Permissions-Policy, strict CSP on every API response. nginx.conf sets its
+  own (looser, SPA-appropriate) CSP + headers for the served frontend.
+- **Global rate-limit floor** (`rate_limit.py GLOBAL_RATE_LIMIT` default
+  240/min via `SlowAPIMiddleware default_limits`) — covers every route
+  including the previously-unlimited expensive ones (pattern dashboard,
+  market overview, Kronos predict, backtest). Per-tier `@limiter.limit`
+  decorators still layer on top. (Note: this static global via middleware
+  works — the earlier "middleware only supports static limits" caveat was
+  about *dynamic* per-tier limits, which still use decorators.)
+- **Docker hardening**: backend runs as non-root `appuser` (uid 10001);
+  frontend uses `nginxinc/nginx-unprivileged` (uid 101, listens 8080).
+  `docker-compose.yml`: Postgres password default REMOVED (`:?` fail-loud),
+  DB port no longer published (internal network only), backend 8000 no
+  longer published (nginx is sole entrypoint), host 80→container 8080, new
+  `ADMIN_API_TOKEN`/`DEBUG_ERRORS`/`GLOBAL_RATE_LIMIT` env wired. TLS
+  expected at nginx/LB upstream (noted in nginx.conf).
+- `.env.example` documents the 3 required-for-prod secrets (JWT_SECRET,
+  POSTGRES_PASSWORD, ADMIN_API_TOKEN) with generation commands.
+- `tests/test_security_hardening.py` (NEW) — admin gate off/on behavior,
+  generic-error no-leak, security headers present. All 51 test files pass.
+- Deploy checklist for the user (what's fixed in code vs. what's a
+  deploy-time action): set the 3 secrets, put HTTPS in front, set
+  CORS_ALLOWED_ORIGINS to the real domain; full per-user login UI remains
+  the one larger open item (only needed for true multi-tenant).
+
 ---
 
 ## Immediate Next Task

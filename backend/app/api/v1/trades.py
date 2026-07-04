@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
+from backend.app.api.deps import require_admin
 from backend.app.schemas.trade_history import (
     BacktestHistoryResponse,
     BacktestRunItem,
@@ -147,8 +148,10 @@ async def delete_backtest_run(run_id: int) -> DeleteResponse:
     return DeleteResponse(deleted=1)
 
 
-@router.delete("/backtest-history", response_model=DeleteResponse)
+@router.delete("/backtest-history", response_model=DeleteResponse, dependencies=[Depends(require_admin)])
 async def delete_all_backtest_runs() -> DeleteResponse:
+    # Mass delete is admin-gated — anonymous "wipe all history" on a deployed
+    # instance would be a trivial destructive action otherwise.
     count = await _db.delete_all_backtest_runs()
     return DeleteResponse(deleted=count)
 

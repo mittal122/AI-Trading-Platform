@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from backend.app.api.deps import require_admin
 from backend.app.core.rate_limit import limiter, tier_rate_limit
 from backend.app.schemas.live_trading import (
     LiveStartRequest,
@@ -12,7 +13,10 @@ from backend.app.services.trading.live_trading_engine import LiveTradingFactory
 router = APIRouter(prefix="/trading", tags=["live-trading"])
 
 
-@router.post("/start", response_model=LiveStatusResponse)
+# Starting/stopping REAL-money trading is admin-gated (open on localhost,
+# locked when ADMIN_API_TOKEN is set) — anonymous callers must never be able
+# to open live positions on a deployed instance.
+@router.post("/start", response_model=LiveStatusResponse, dependencies=[Depends(require_admin)])
 @limiter.limit(tier_rate_limit)
 async def start_live_trading(request: Request, req: LiveStartRequest) -> LiveStatusResponse:
     engine = LiveTradingFactory.get_engine()
@@ -24,11 +28,13 @@ async def start_live_trading(request: Request, req: LiveStartRequest) -> LiveSta
     try:
         engine.start(req, api_key=api_key, api_secret=api_secret)
     except RuntimeError as e:
+        # RuntimeError here carries an intentional operator message
+        # ("already running" / "halted by emergency stop") — safe to surface.
         raise HTTPException(status_code=409, detail=str(e))
     return engine.status()
 
 
-@router.post("/stop", response_model=LiveStopResponse)
+@router.post("/stop", response_model=LiveStopResponse, dependencies=[Depends(require_admin)])
 async def stop_live_trading(emergency: bool = False) -> LiveStopResponse:
     engine = LiveTradingFactory.get_engine()
     if not engine.is_running and not emergency:

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { deleteBinanceKeys, getBinanceKeyStatus, saveBinanceKeys } from '../api/client'
+import { deleteBinanceKeys, getBinanceKeyStatus, saveBinanceKeys, getAdminToken, setAdminToken } from '../api/client'
 
 export default function Settings() {
   const [apiKey, setApiKey] = useState('')
@@ -8,6 +8,8 @@ export default function Settings() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null)
   const [confirmRemove, setConfirmRemove] = useState(false)
+  const [adminToken, setAdminTokenInput] = useState(getAdminToken())
+  const [adminSaved, setAdminSaved] = useState(false)
 
   useEffect(() => {
     getBinanceKeyStatus().then(res => setStatus(res.data)).catch(() => setStatus({ configured: false, key_preview: null }))
@@ -50,9 +52,36 @@ export default function Settings() {
     }
   }
 
+  function saveAdmin() {
+    setAdminToken(adminToken.trim())
+    setAdminSaved(true)
+    setTimeout(() => setAdminSaved(false), 2500)
+  }
+
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-xl font-bold text-white">Settings</h1>
+
+      {/* Admin token — only needed when the deployment locks money endpoints
+          (ADMIN_API_TOKEN set server-side). Blank on single-operator localhost. */}
+      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5 space-y-3">
+        <h2 className="text-sm font-semibold text-slate-300">Admin Access Token</h2>
+        <p className="text-xs text-slate-500">
+          Only required if this deployment has locked the sensitive actions (saving Binance keys,
+          starting live trading, deleting all history) behind an admin token. Leave blank for a
+          local single-operator setup. Stored only in this browser and sent as an <code className="text-indigo-400">X-Admin-Token</code> header.
+        </p>
+        <div className="flex items-center gap-3">
+          <input type="password" autoComplete="off" value={adminToken}
+            onChange={e => setAdminTokenInput(e.target.value)} placeholder="admin token (optional)"
+            className="flex-1 max-w-md bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500" />
+          <button onClick={saveAdmin}
+            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm text-white font-medium">
+            Save
+          </button>
+          {adminSaved && <span className="text-xs text-green-400">✓ Saved for this browser</span>}
+        </div>
+      </div>
 
       <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5 space-y-4">
         <div className="flex items-center justify-between">

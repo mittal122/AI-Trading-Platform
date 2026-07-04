@@ -4,12 +4,15 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-trading}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-trading}
+      # No default — compose fails loudly if POSTGRES_PASSWORD is unset,
+      # rather than silently booting the DB with a guessable credential.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-trading}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # NOT published to the host — the DB is reachable only over the internal
+    # compose network by the backend. Uncomment (bound to loopback) only for
+    # local debugging: # ports: ["127.0.0.1:5432:5432"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trading}"]
       interval: 5s
@@ -25,9 +28,14 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-trading}:${POSTGRES_PASSWORD:-trading}@postgres:5432/${POSTGRES_DB:-trading}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-trading}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-trading}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost}
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env — generate with: python -c 'import secrets; print(secrets.token_urlsafe(48))'}
+      # Lock the money-critical endpoints (exchange keys, live trading,
+      # mass-delete) on a deployed instance. Leave unset for single-operator.
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-}
+      DEBUG_ERRORS: ${DEBUG_ERRORS:-false}
+      GLOBAL_RATE_LIMIT: ${GLOBAL_RATE_LIMIT:-240/minute}
       NVIDIA_API_KEY: ${NVIDIA_API_KEY}
       NVIDIA_NIM_BASE_URL: ${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}
       MARKET_ANALYST_MODEL: ${MARKET_ANALYST_MODEL:-nvidia/nemotron-3-super-120b-a12b}
@@ -52,8 +60,9 @@ services:
       DEFAULT_PRED_LEN: ${DEFAULT_PRED_LEN:-24}
     volumes:
       - ${KRONOS_PATH_HOST:-./kronos}:/kronos:ro
-    ports:
-      - "8000:8000"
+    # NOT published to the host — nginx (frontend) is the only entrypoint and
+    # reaches the backend over the internal network. Publishing 8000 would
+    # bypass the reverse proxy and its security headers.
 
   frontend:
     build:
@@ -62,8 +71,9 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+    # Host 80 → container's unprivileged nginx on 8080.
     ports:
-      - "80:80"
+      - "80:8080"
 
 volumes:
   postgres_data:

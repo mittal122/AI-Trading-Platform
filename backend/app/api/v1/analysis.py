@@ -44,9 +44,10 @@ def explain_analysis(req: AnalysisExplainRequest):
         explainer = AnalysisExplainer()
         explanation = explainer.explain(req.symbol, req.interval, result.tools)
     except RuntimeError as exc:
+        # Config-not-set message (e.g. NVIDIA_API_KEY missing) — safe/useful.
         raise HTTPException(status_code=503, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"AI analysis failed: {exc}")
+    except Exception:
+        raise HTTPException(status_code=502, detail="AI analysis failed")
 
     return AnalysisExplainResponse(
         symbol=req.symbol, interval=req.interval, tool_keys=req.tool_keys,

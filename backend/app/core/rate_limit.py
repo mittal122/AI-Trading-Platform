@@ -11,12 +11,22 @@ Tier is read from the JWT access-token claim (no DB hit per request). Requests
 without a valid token are keyed by IP and rate-limited at the free tier.
 """
 
+import os
+
 from fastapi import Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from backend.app.core.saas_config import saas_config
 from backend.app.core.security import decode_token
+
+# Blanket per-key ceiling applied to EVERY route via SlowAPIMiddleware — a
+# DoS/cost backstop for the expensive, otherwise-unlimited endpoints
+# (pattern dashboard, market overview, Kronos predict, backtest). Generous
+# enough that no real user hits it; a scraper or fan-out abuser does. The
+# per-tier @limiter.limit decorators still layer stricter caps on specific
+# routes on top of this. Env-overridable.
+GLOBAL_RATE_LIMIT = os.getenv("GLOBAL_RATE_LIMIT", "240/minute")
 
 _TIER_LIMITS = {
     "free": saas_config.RATE_LIMIT_FREE,
@@ -51,4 +61,4 @@ def tier_rate_limit(key: str) -> str:
     return _TIER_LIMITS.get(tier, _TIER_LIMITS["free"])
 
 
-limiter = Limiter(key_func=rate_limit_key)
+limiter = Limiter(key_func=rate_limit_key, default_limits=[GLOBAL_RATE_LIMIT])

@@ -5,6 +5,27 @@ export const api = axios.create({
   timeout: 30000,
 })
 
+// Admin token for money-critical endpoints (exchange keys, live trading,
+// delete-all). Only needed when the deployment sets ADMIN_API_TOKEN; on a
+// single-operator localhost instance those endpoints are open and this stays
+// empty. Stored locally and attached to every request so the whole UI keeps
+// working once entered — never sent anywhere but this backend.
+const ADMIN_TOKEN_KEY = 'admin.apiToken'
+export function getAdminToken(): string {
+  try { return localStorage.getItem(ADMIN_TOKEN_KEY) ?? '' } catch { return '' }
+}
+export function setAdminToken(token: string) {
+  try {
+    if (token) localStorage.setItem(ADMIN_TOKEN_KEY, token)
+    else localStorage.removeItem(ADMIN_TOKEN_KEY)
+  } catch { /* storage unavailable */ }
+}
+api.interceptors.request.use(config => {
+  const token = getAdminToken()
+  if (token) config.headers['X-Admin-Token'] = token
+  return config
+})
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface ExchangeSymbol {
