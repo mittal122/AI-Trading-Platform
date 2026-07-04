@@ -46,6 +46,7 @@ const DIR_DOT: Record<string, string> = {
 const TOOL_LINE_COLORS: Record<string, string> = {
   ema20: '#22c55e', ema50: '#3b82f6', sma50: '#f59e0b', sma200: '#ef4444',
   daily_vwap: '#818cf8', anchored_vwap: '#c084fc',
+  trend_line: '#fbbf24', trend_resistance: '#ef4444', trend_support: '#22c55e',
 }
 
 function toBarTime(timestamp: string): UTCTimestamp {
@@ -142,6 +143,10 @@ export default function PatternAnalysis() {
     ? { ...selectedRaw, ai: patternAiCache[selectedRaw.id] ?? selectedRaw.ai }
     : null
   const enabledSet = new Set(enabledTools)
+  const toolResultKeys = new Set(toolResults.map(t => t.tool_key))
+  const toolsLastUpdated = toolResults.reduce<string | null>(
+    (latest, t) => (!latest || t.last_updated > latest ? t.last_updated : latest), null,
+  )
   const scanLimit = Math.min(Math.max(loadedCount, INITIAL_CANDLES), MAX_SCAN_LIMIT)
   // Highest-confidence pattern first — the list's own priority ranking.
   const sortedPatterns = [...patterns].sort((a, b) => b.confidence - a.confidence)
@@ -590,8 +595,26 @@ export default function PatternAnalysis() {
           </div>
 
           <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-3">
-            <p className="text-xs text-slate-500 mb-2">Analysis tools — toggle individually, each with its own (ⓘ) documentation</p>
-            <ToolToggleBar enabled={enabledSet} onToggle={toggleTool} />
+            <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+              <p className="text-xs text-slate-500">Analysis tools — toggle individually, each with its own (ⓘ) documentation</p>
+              {enabledTools.length > 0 && (
+                toolsLoading ? (
+                  <span className="text-xs text-amber-400 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" /> Scanning…
+                  </span>
+                ) : toolsLastUpdated ? (
+                  <span className="text-xs text-green-400 flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-400" /> Live — updated {new Date(toolsLastUpdated).toLocaleTimeString()}
+                  </span>
+                ) : null
+              )}
+            </div>
+            {toolsLoading && (
+              <div className="relative h-1 w-full bg-[#0f1117] rounded-full overflow-hidden mb-2">
+                <div className="tool-scan-bar absolute inset-y-0 w-1/3 bg-indigo-500 rounded-full" />
+              </div>
+            )}
+            <ToolToggleBar enabled={enabledSet} onToggle={toggleTool} loading={toolsLoading} readyKeys={toolResultKeys} />
           </div>
         </div>
 

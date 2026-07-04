@@ -6,6 +6,7 @@ from backend.app.schemas.live_trading import (
     LiveStatusResponse,
     LiveStopResponse,
 )
+from backend.app.services.db_service import DatabaseService
 from backend.app.services.trading.live_trading_engine import LiveTradingFactory
 
 router = APIRouter(prefix="/trading", tags=["live-trading"])
@@ -15,8 +16,13 @@ router = APIRouter(prefix="/trading", tags=["live-trading"])
 @limiter.limit(tier_rate_limit)
 async def start_live_trading(request: Request, req: LiveStartRequest) -> LiveStatusResponse:
     engine = LiveTradingFactory.get_engine()
+    api_key = api_secret = None
+    if not req.dry_run:
+        creds = await DatabaseService().get_exchange_credentials()
+        if creds:
+            api_key, api_secret = creds
     try:
-        engine.start(req)
+        engine.start(req, api_key=api_key, api_secret=api_secret)
     except RuntimeError as e:
         raise HTTPException(status_code=409, detail=str(e))
     return engine.status()

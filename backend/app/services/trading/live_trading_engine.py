@@ -53,7 +53,12 @@ class LiveTradingEngine:
     # Public API
     # ------------------------------------------------------------------
 
-    def start(self, config: LiveStartRequest) -> None:
+    def start(
+        self,
+        config: LiveStartRequest,
+        api_key: Optional[str] = None,
+        api_secret: Optional[str] = None,
+    ) -> None:
         if self.is_running:
             raise RuntimeError("Live trading already running — call /trading/stop first")
         if self.emergency_stopped:
@@ -61,7 +66,7 @@ class LiveTradingEngine:
                 "Engine halted by emergency stop. Restart the application to resume."
             )
         self.config = config
-        self._init_components(config)
+        self._init_components(config, api_key=api_key, api_secret=api_secret)
         self.is_running = True
         self.started_at = datetime.now(timezone.utc).isoformat()
         self._task = asyncio.create_task(self._ws_loop())
@@ -133,11 +138,18 @@ class LiveTradingEngine:
     # Internal setup
     # ------------------------------------------------------------------
 
-    def _init_components(self, config: LiveStartRequest) -> None:
+    def _init_components(
+        self,
+        config: LiveStartRequest,
+        api_key: Optional[str] = None,
+        api_secret: Optional[str] = None,
+    ) -> None:
         self._portfolio = SimplePortfolio(initial_balance=config.initial_balance)
         self._strategy = StrategyFactory.get_strategy(config.strategy)
         self._position = PositionFactory.get_engine()
-        self._execution = BinanceExecution(symbol=config.symbol, dry_run=config.dry_run)
+        self._execution = BinanceExecution(
+            symbol=config.symbol, dry_run=config.dry_run, api_key=api_key, api_secret=api_secret
+        )
         self._trade_manager = TradeManager()
         self._drawdown_guard = DrawdownGuard()
         self._daily_loss_limit = DailyLossLimit()

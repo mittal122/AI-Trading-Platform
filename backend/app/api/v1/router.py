@@ -11,6 +11,7 @@ from backend.app.api.v1.paper import router as paper_router
 from backend.app.api.v1.patterns import router as patterns_router
 from backend.app.api.v1.portfolio import router as portfolio_router
 from backend.app.api.v1.prediction import router as prediction_router
+from backend.app.api.v1.settings import router as settings_router
 from backend.app.api.v1.strategy import router as strategy_router
 from backend.app.api.v1.trades import router as trades_router
 
@@ -29,3 +30,4 @@ api_router.include_router(live_trading_router)
 api_router.include_router(trades_router)
 api_router.include_router(auth_router)
 api_router.include_router(billing_router)
+api_router.include_router(settings_router)

@@ -15,3 +15,12 @@ body {
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: #0f1117; }
 ::-webkit-scrollbar-thumb { background: #2a2d3e; border-radius: 3px; }
+
+/* Indeterminate progress bar — analysis tools scan feedback */
+@keyframes tool-scan-bar {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+.tool-scan-bar {
+  animation: tool-scan-bar 1s ease-in-out infinite;
+}

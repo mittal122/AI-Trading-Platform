@@ -55,14 +55,15 @@ class SupportResistanceTool(BaseAnalysisTool):
             bias = PatternDirection.BULLISH if dist_to_support < dist_to_resistance else PatternDirection.BEARISH
 
         annotations = ChartAnnotations(
+            # Psychological round-number levels are intentionally excluded from
+            # the chart (too many near-duplicate lines cluttered the view) —
+            # still computed and returned in `data` below for the info panel.
             levels=[
                 LevelAnnotation(label=f"resistance (touched {l['touches']}x)", price=l["price"], strength=l["touches"])
                 for l in resistance_levels
             ] + [
                 LevelAnnotation(label=f"support (touched {l['touches']}x)", price=l["price"], strength=l["touches"])
                 for l in support_levels
-            ] + [
-                LevelAnnotation(label="psychological", price=p) for p in psychological
             ],
         )
 

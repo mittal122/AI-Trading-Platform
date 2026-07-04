@@ -300,3 +300,19 @@ export const placePaperOrder = (body: {
 
 export const getManualOrders = () =>
   api.get<ManualPaperStatus>('/paper/orders')
+
+// ── Exchange credentials (Settings page) ────────────────────────────────────
+
+export interface BinanceKeyStatus {
+  configured: boolean
+  key_preview: string | null
+}
+
+export const getBinanceKeyStatus = () =>
+  api.get<BinanceKeyStatus>('/settings/binance-keys/status')
+
+export const saveBinanceKeys = (body: { api_key: string; api_secret: string }) =>
+  api.post<BinanceKeyStatus>('/settings/binance-keys', body)
+
+export const deleteBinanceKeys = () =>
+  api.delete<BinanceKeyStatus>('/settings/binance-keys')

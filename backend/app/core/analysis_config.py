@@ -32,6 +32,10 @@ class AnalysisConfig:
     ATR_LOW_VOL_PCT = 1.0     # ATR as % of price below this = LOW volatility
     ATR_HIGH_VOL_PCT = 3.0    # ATR as % of price above this = HIGH volatility
 
+    # Trend Line tool
+    TREND_LOOKBACK_BARS = 300
+    TREND_MIN_SWINGS_FOR_CHANNEL = 2  # min swing highs AND lows needed to draw a channel
+
     # Scan defaults
     ANALYSIS_SCAN_MAX_WORKERS = 8
 

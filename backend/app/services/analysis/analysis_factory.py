@@ -3,6 +3,7 @@ from backend.app.services.analysis.fvg_tool import FVGTool
 from backend.app.services.analysis.moving_averages import MovingAveragesTool
 from backend.app.services.analysis.pivot_points import PivotPointsTool
 from backend.app.services.analysis.support_resistance import SupportResistanceTool
+from backend.app.services.analysis.trend_tool import TrendlineTool
 from backend.app.services.analysis.vwap_tool import VWAPTool
 
 
@@ -15,6 +16,7 @@ class AnalysisFactory:
         "pivot_points": PivotPointsTool,
         "atr": ATRTool,
         "fvg": FVGTool,
+        "trend": TrendlineTool,
     }
 
     @staticmethod

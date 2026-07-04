@@ -11,10 +11,18 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import AsyncGenerator
 
+from backend.app.core.security import decrypt_secret, encrypt_secret
 from backend.app.db.database import AsyncSessionLocal
 from backend.app.db.models import BacktestRun, Trade
 from backend.app.db.repository.backtest_repo import BacktestRepository
+from backend.app.db.repository.credentials_repo import CredentialsRepository
 from backend.app.db.repository.trade_repo import TradeRepository
+
+
+def _mask_key(api_key: str) -> str:
+    if len(api_key) <= 8:
+        return "*" * len(api_key)
+    return f"{api_key[:4]}{'*' * 8}{api_key[-4:]}"
 
 
 class DatabaseService:
@@ -151,3 +159,35 @@ class DatabaseService:
         async with self._session() as session:
             repo = BacktestRepository(session)
             return await repo.delete_all()
+
+    async def save_exchange_credentials(
+        self, api_key: str, api_secret: str, exchange: str = "binance"
+    ) -> str:
+        preview = _mask_key(api_key)
+        encrypted_key = encrypt_secret(api_key)
+        encrypted_secret = encrypt_secret(api_secret)
+        async with self._session() as session:
+            repo = CredentialsRepository(session)
+            await repo.upsert(exchange, encrypted_key, encrypted_secret, preview)
+        return preview
+
+    async def get_exchange_credentials(self, exchange: str = "binance") -> tuple[str, str] | None:
+        async with self._session() as session:
+            repo = CredentialsRepository(session)
+            record = await repo.get(exchange)
+        if record is None:
+            return None
+        return decrypt_secret(record.api_key_encrypted), decrypt_secret(record.api_secret_encrypted)
+
+    async def get_exchange_credentials_status(self, exchange: str = "binance") -> dict:
+        async with self._session() as session:
+            repo = CredentialsRepository(session)
+            record = await repo.get(exchange)
+        if record is None:
+            return {"configured": False, "key_preview": None}
+        return {"configured": True, "key_preview": record.key_preview}
+
+    async def delete_exchange_credentials(self, exchange: str = "binance") -> bool:
+        async with self._session() as session:
+            repo = CredentialsRepository(session)
+            return await repo.delete(exchange)

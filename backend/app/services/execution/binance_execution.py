@@ -26,7 +26,13 @@ class BinanceExecution(BaseExecution):
     FEE_PERCENT = 0.10
     SLIPPAGE_PERCENT = 0.05
 
-    def __init__(self, symbol: str, dry_run: bool = True) -> None:
+    def __init__(
+        self,
+        symbol: str,
+        dry_run: bool = True,
+        api_key: str | None = None,
+        api_secret: str | None = None,
+    ) -> None:
         self.symbol = symbol.upper()
         self.dry_run = dry_run
         self._orders: list[LiveOrder] = []
@@ -34,13 +40,17 @@ class BinanceExecution(BaseExecution):
         if dry_run:
             self._client = Client()
         else:
-            api_key = os.getenv("BINANCE_API_KEY")
-            secret = os.getenv("BINANCE_SECRET")
-            if not api_key or not secret:
+            # Caller-supplied credentials (from the Settings page, stored
+            # encrypted in the DB) take priority; .env is the fallback for
+            # anyone who still prefers env-only configuration.
+            api_key = api_key or os.getenv("BINANCE_API_KEY")
+            api_secret = api_secret or os.getenv("BINANCE_SECRET")
+            if not api_key or not api_secret:
                 raise RuntimeError(
-                    "Live trading requires BINANCE_API_KEY and BINANCE_SECRET env vars"
+                    "Live trading requires Binance API credentials — set them on the "
+                    "Settings page, or via BINANCE_API_KEY/BINANCE_SECRET env vars"
                 )
-            self._client = Client(api_key, secret)
+            self._client = Client(api_key, api_secret)
 
     # ------------------------------------------------------------------
     # BaseExecution interface

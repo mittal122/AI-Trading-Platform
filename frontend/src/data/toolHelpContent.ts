@@ -221,6 +221,39 @@ export const TOOL_HELP: Record<string, ToolHelpContent> = {
     whenToAvoid: 'Avoid trading a stand-alone gap fill against a strong, established higher-timeframe trend.',
     combineWith: 'Market Structure/SMC concepts (order blocks, BOS/CHOCH), Support & Resistance (a gap that lines up with a known level is stronger), and ATR (to judge if a gap is actually significant).',
   },
+
+  trend: {
+    key: 'trend',
+    name: 'Trend Line',
+    whatIsIt: 'A straight line fitted through recent closing prices showing the market\'s overall direction, plus (when enough swing points exist) a channel drawn through the swing highs and swing lows.',
+    whyTradersUseIt: 'To answer "what is the trend right now" at a glance, without eyeballing candles — the fitted line and its slope give an objective direction and strength reading instead of a subjective one.',
+    whatItDetects: 'Trend direction (rising/falling/flat) and strength (how tightly price hugs the line, as a % fit), cross-checked against swing structure (higher-highs+higher-lows = uptrend, lower-highs+lower-lows = downtrend).',
+    whyItMatters: 'Nearly every other tool\'s signal means something different depending on the prevailing trend — a support bounce in an uptrend is a higher-probability long than the same bounce during a downtrend.',
+    calculationMethod: 'Least-squares regression line through closing prices over the lookback window. Slope is normalized to %/bar so it is comparable across symbols and price levels. When at least 2 swing highs and 2 swing lows exist, a channel is also fit through them (resistance line through highs, support line through lows).',
+    detectionLogic: 'Direction bias comes from the swing structure (last two highs/lows) when there are enough swings; otherwise it falls back to the regression line\'s slope direction.',
+    aiInvolvement: 'None in detection (pure regression + swing geometry). AI (on-demand) can reason about the trend alongside other enabled tools.',
+    mathConcepts: 'Least-squares linear regression, R² (coefficient of determination, used here as "trend cleanliness"), fractal swing-point structure.',
+    whenToEnable: 'Almost always — it is the fastest way to confirm you are trading with, not against, the prevailing direction.',
+    howToInterpret: 'A steep slope with a high fit % is a strong, clean trend. A near-flat slope or a low fit % means price is choppy/range-bound — trend-following setups are less reliable there.',
+    howToConfirm: 'Check that the swing-structure read (HH/HL or LH/LL) agrees with the regression slope — when both agree, the trend read is more reliable than either alone.',
+    commonMistakes: [
+      'Treating a short lookback trendline as a long-term trend call — it only describes the fitted window, not the whole history.',
+      'Ignoring a low fit % (R²) — a "trend" that price barely tracks is much weaker than the slope number alone suggests.',
+      'Assuming the channel boundaries are exact — like any trendline, they are a zone, not a precise price.',
+    ],
+    bestPractices: [
+      'Favor trades in the direction of the fitted trend, not against it.',
+      'Use the channel (when drawn) as dynamic support/resistance, similar to a rising/falling wedge.',
+      'Recheck this tool after any large impulsive move — the fit can shift quickly once new swings form.',
+    ],
+    recommendedTimeframe: 'Works on any timeframe; higher timeframes give a more stable, less noisy trend read.',
+    recommendedConditions: 'Most useful for confirming directional bias before taking a trend-following or pullback setup from another tool.',
+    realExample: 'If the regression line is clearly rising with a high fit %, and swing structure confirms higher-highs/higher-lows, a pullback into the channel support line is a higher-conviction long than the same pullback with no trend confirmation.',
+    institutionalUse: 'Systematic trend-following funds use very similar slope/regression-based trend filters to decide which direction they are even willing to trade, before any entry signal is considered.',
+    whenItFails: 'In choppy, range-bound markets the fitted line has a low R² and flips direction often — treat a low-fit trendline as noise, not a real trend.',
+    whenToAvoid: 'Avoid leaning on this alone right at a major structural turning point — the regression line is backward-looking and lags a genuine trend change.',
+    combineWith: 'Moving Averages (does the MA stack agree with this trendline\'s direction?), Support & Resistance, and Market Structure/SMC concepts for confirmation.',
+  },
 }
 
-export const TOOL_HELP_ORDER = ['support_resistance', 'moving_averages', 'vwap', 'pivot_points', 'atr', 'fvg']
+export const TOOL_HELP_ORDER = ['trend', 'support_resistance', 'moving_averages', 'vwap', 'pivot_points', 'atr', 'fvg']

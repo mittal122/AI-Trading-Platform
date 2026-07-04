@@ -1,21 +1,116 @@
+import { useEffect, useState } from 'react'
+import { deleteBinanceKeys, getBinanceKeyStatus, saveBinanceKeys } from '../api/client'
+
 export default function Settings() {
+  const [apiKey, setApiKey] = useState('')
+  const [apiSecret, setApiSecret] = useState('')
+  const [status, setStatus] = useState<{ configured: boolean; key_preview: string | null } | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null)
+  const [confirmRemove, setConfirmRemove] = useState(false)
+
+  useEffect(() => {
+    getBinanceKeyStatus().then(res => setStatus(res.data)).catch(() => setStatus({ configured: false, key_preview: null }))
+  }, [])
+
+  useEffect(() => {
+    if (!confirmRemove) return
+    const t = setTimeout(() => setConfirmRemove(false), 4000)
+    return () => clearTimeout(t)
+  }, [confirmRemove])
+
+  async function handleSave() {
+    setSaving(true)
+    setMessage(null)
+    try {
+      const res = await saveBinanceKeys({ api_key: apiKey.trim(), api_secret: apiSecret.trim() })
+      setStatus(res.data)
+      setApiKey('')
+      setApiSecret('')
+      setMessage({ text: 'Binance API keys saved.' })
+    } catch (e: any) {
+      setMessage({ text: e?.response?.data?.detail ?? 'Failed to save keys.', error: true })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleRemove() {
+    if (!confirmRemove) {
+      setConfirmRemove(true)
+      return
+    }
+    setConfirmRemove(false)
+    try {
+      const res = await deleteBinanceKeys()
+      setStatus(res.data)
+      setMessage({ text: 'Binance API keys removed.' })
+    } catch {
+      setMessage({ text: 'Failed to remove keys.', error: true })
+    }
+  }
+
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-xl font-bold text-white">Settings</h1>
 
       <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5 space-y-4">
-        <h2 className="text-sm font-semibold text-slate-300">API Connection</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-slate-300">Binance Account (Live Trading)</h2>
+          {status && (
+            <span className={`text-xs px-2 py-0.5 rounded-full ${status.configured ? 'bg-green-500/10 text-green-400' : 'bg-slate-700/40 text-slate-500'}`}>
+              {status.configured ? `Configured — ${status.key_preview}` : 'Not configured'}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-slate-500">
+          Enter your own Binance API key/secret to place real orders in Live Trading.
+          Stored encrypted in the database, never shown again after saving.
+          Leave blank to keep using Paper Trading / dry-run mode only.
+        </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="text-xs text-slate-500 mb-1 block">Backend URL</label>
-            <input defaultValue="http://localhost:8000"
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none" />
+            <label className="text-xs text-slate-500 mb-1 block">API Key</label>
+            <input
+              type="password"
+              autoComplete="off"
+              value={apiKey}
+              onChange={e => setApiKey(e.target.value)}
+              placeholder={status?.configured ? '••••••••••••••••' : 'Binance API key'}
+              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none"
+            />
           </div>
           <div>
-            <label className="text-xs text-slate-500 mb-1 block">Default Symbol</label>
-            <input defaultValue="BTCUSDT"
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none" />
+            <label className="text-xs text-slate-500 mb-1 block">API Secret</label>
+            <input
+              type="password"
+              autoComplete="off"
+              value={apiSecret}
+              onChange={e => setApiSecret(e.target.value)}
+              placeholder={status?.configured ? '••••••••••••••••' : 'Binance API secret'}
+              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none"
+            />
           </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleSave}
+            disabled={saving || apiKey.trim().length < 10 || apiSecret.trim().length < 10}
+            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm text-white font-medium"
+          >
+            {saving ? 'Saving…' : 'Save Keys'}
+          </button>
+          {status?.configured && (
+            <button
+              onClick={handleRemove}
+              className={`px-4 py-2 rounded-lg text-sm font-medium border ${confirmRemove ? 'bg-red-600 border-red-600 text-white' : 'border-[#2a2d3e] text-slate-400 hover:text-red-400'}`}
+            >
+              {confirmRemove ? 'Click again to confirm' : 'Remove Keys'}
+            </button>
+          )}
+          {message && (
+            <span className={`text-xs ${message.error ? 'text-red-400' : 'text-green-400'}`}>{message.text}</span>
+          )}
         </div>
       </div>
 
@@ -23,8 +118,8 @@ export default function Settings() {
         <h2 className="text-sm font-semibold text-slate-300">Environment Variables Required</h2>
         {[
           ['NVIDIA_API_KEY', 'Required for all AI features — routes to NVIDIA NIM (chat, analyst, validator, etc.)'],
-          ['BINANCE_API_KEY', 'Required for live trading only'],
-          ['BINANCE_SECRET', 'Required for live trading only'],
+          ['BINANCE_API_KEY', 'Fallback only — prefer the Binance Account form above'],
+          ['BINANCE_SECRET', 'Fallback only — prefer the Binance Account form above'],
           ['DATABASE_URL', 'Optional — defaults to SQLite (trading.db)'],
           ['MARKET_ANALYST_MODEL', 'Optional — defaults to nemotron-3-super'],
           ['CHAT_ASSISTANT_MODEL', 'Optional — defaults to kimi-k2.5'],

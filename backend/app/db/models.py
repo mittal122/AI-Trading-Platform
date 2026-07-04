@@ -136,6 +136,29 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
 
 
+class ExchangeCredentials(Base):
+    """Encrypted exchange API credentials.
+
+    Single global row per exchange, not per-user — the frontend has no login
+    flow wired up yet (see CLAUDE.md Phase 10 note on singleton trading
+    engines), so this matches the app's current single-operator reality
+    rather than building unused per-user scoping. api_key/api_secret are
+    stored Fernet-encrypted (see core/security.py) since the raw secret must
+    be recoverable to pass to the Binance SDK — unlike ApiKey above, which
+    only ever needs a one-way hash compare.
+    """
+
+    __tablename__ = "exchange_credentials"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    exchange: Mapped[str] = mapped_column(String(20), unique=True, nullable=False, default="binance")
+    api_key_encrypted: Mapped[str] = mapped_column(String(500), nullable=False)
+    api_secret_encrypted: Mapped[str] = mapped_column(String(500), nullable=False)
+    key_preview: Mapped[str] = mapped_column(String(20), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
+
+
 class ApiKey(Base):
     """User-issued API key. Only the hash is stored — the raw key is shown once at creation."""
 

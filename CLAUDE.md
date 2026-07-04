@@ -1022,6 +1022,97 @@ the frontend's 30s axios timeout, which is exactly what "failing" looked like.
   `AnalysisExplainer` a few turns ago) to `PatternExplainer` too — same
   malformed-JSON failure mode is possible in both, only one had the fix.
 
+### Post-Phase-10 addition — User-entered Binance API keys (2026-07-04)
+
+User wants to use their own Binance account for live trading, entered from
+the Settings page rather than only via `.env`.
+
+- **No login UI exists** (confirmed by investigation — backend JWT auth
+  routes exist since Phase 10, but frontend has zero login page/AuthContext/
+  token-attaching axios interceptor). Building full per-user credential
+  scoping would require that auth UI first, which wasn't asked for. Given
+  `LiveTradingFactory`/`PaperFactory` are already process-wide singletons
+  (not per-user — documented Phase 10 limitation), a **single global
+  encrypted credential row** matches the app's actual current
+  single-operator reality, not a design regression.
+- New DB model `ExchangeCredentials` (`backend/app/db/models.py`) — one row
+  per exchange (`exchange` unique), `api_key_encrypted`/`api_secret_encrypted`
+  (Fernet, not hashed — unlike `ApiKey`'s SHA-256, these must be recoverable
+  in plaintext to hand to the Binance SDK), `key_preview` for UI display.
+  Migration `2b6f9a4d1e73`.
+  `core/security.py` gained `encrypt_secret`/`decrypt_secret` — Fernet key
+  derived from `ENCRYPTION_KEY` env var if set, else derived from
+  `JWT_SECRET` (no new required env var; `cryptography` was already a pinned
+  dependency, unused directly until now).
+- `backend/app/db/repository/credentials_repo.py` (upsert/get/delete) +
+  `DatabaseService.save_exchange_credentials`/`get_exchange_credentials`/
+  `get_exchange_credentials_status`/`delete_exchange_credentials`.
+- New endpoints: `POST/GET/DELETE /api/v1/settings/binance-keys(/status)`
+  (`backend/app/api/v1/settings.py`). No auth dependency — consistent with
+  the rest of this app's currently-unauthenticated frontend calls.
+- `BinanceExecution.__init__` and `LiveTradingEngine.start`/`_init_components`
+  now accept optional `api_key`/`api_secret` params; `POST /trading/start`
+  fetches decrypted DB credentials first (only when `dry_run=False`) and
+  passes them through — falls back to `BINANCE_API_KEY`/`BINANCE_SECRET` env
+  vars if no DB row exists, so existing env-only setups keep working
+  unchanged.
+- Frontend: `Settings.tsx`'s previously-cosmetic, unwired "API Connection"
+  card replaced with a real form (masked password inputs, save/status/remove,
+  remove uses the same 2-click-confirm pattern as Backtest's "Delete All
+  History"). `client.ts` gained `getBinanceKeyStatus`/`saveBinanceKeys`/
+  `deleteBinanceKeys`.
+- Verified: encrypt/decrypt roundtrip, full repo CRUD (`tests/test_exchange_credentials.py`,
+  new), FastAPI route registration (`/api/v1/settings/binance-keys*` present
+  in the live OpenAPI schema), all 41 pre-existing test files still pass
+  (zero regressions), frontend `tsc --noEmit` clean.
+
+### Post-Phase-10 addition — Trend Line analysis tool (2026-07-04)
+
+User wanted a way to see the market's overall trend on the Pattern Analysis
+page. Added as the 7th Analysis Tool (`backend/app/services/analysis/trend_tool.py`,
+factory key `trend`) — same architecture as the other 6 (algorithmic-only,
+no AI in detection; `AnalysisFactory`/`AnalysisScanner`/toggle-bar/help-panel
+all generic, so this needed zero special-case frontend code beyond a color
+map entry + help content).
+
+- Direction/strength: least-squares regression line through closes over the
+  lookback window (`TREND_LOOKBACK_BARS=300`), slope normalized to %/bar,
+  R² used as "trend fit strength." Reuses the existing `fit_trendline`/
+  `classify_slope`/`slope_pct_per_bar` primitives from `pattern/trendline.py`
+  (already used by Triangle/Wedge/Channel detectors) rather than duplicating
+  regression math.
+- Bias: swing structure (last 2 swing highs/lows via `SwingDetector` — HH+HL
+  = BULLISH, LH+LL = BEARISH, mixed = NEUTRAL) takes priority when at least
+  2 highs and 2 lows exist; falls back to the regression slope's direction
+  otherwise (e.g. early in a dataset, or a driftless/very short window).
+- Channel: when ≥2 swing highs AND ≥2 swing lows exist, also fits and draws
+  a resistance line through the highs and a support line through the lows
+  (`TREND_MIN_SWINGS_FOR_CHANNEL=2`) — gives a visual channel, not just one
+  line. A clean monotonic move with no real swings correctly draws only the
+  main trend line, no channel (verified in the synthetic test below, not
+  assumed).
+- Annotation labels are static (`trend_line`/`trend_resistance`/`trend_support`,
+  not dynamic strings) specifically so they map cleanly in the frontend's
+  `TOOL_LINE_COLORS` — dynamic per-render label text (e.g. embedding the
+  slope %) would never match a static color-map key.
+- `tests/test_trend_tool.py` — factory registration, a synthetic monotonic
+  uptrend (asserts BULLISH/RISING/high-fit/no-channel), a synthetic
+  oscillating uptrend (asserts HH/HL structure + full channel), and a live
+  BTCUSDT/1h scan. Hit the numpy/pandas segfault gotcha again while writing
+  this (see the Pattern Recognition section above) — but a new variant:
+  building the synthetic DataFrame with **tz-aware** (`timezone.utc`)
+  Python `datetime`s doesn't segfault, but does silently produce a
+  tz-aware `datetime64` column whose `.to_numpy()` returns an object array
+  of `Timestamp`s (not real `numpy.datetime64` scalars) — `SwingDetector`'s
+  `times[i].item()` then throws `AttributeError: 'Timestamp' object has no
+  attribute 'item'`, since `Timestamp` has no `.item()`. Real market data
+  timestamps are tz-naive, so synthetic test data must be too — switched to
+  naive `datetime(2026, 1, 1)` (no `tzinfo`) and it matched real data's
+  dtype/behavior correctly.
+- Verified: full `AnalysisScanner.scan()` (all 7 tools) returns zero errors
+  including `trend`; all 43 test files (41 prior + this + the same-session
+  exchange-credentials test) pass; frontend `tsc --noEmit` clean.
+
 ---
 
 ## Immediate Next Task
