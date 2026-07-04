@@ -1,9 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
-import { getPaperStatus, startPaper, stopPaper, getManualOrders, getTradeHistory } from '../api/client'
-import type { PaperStatus, ManualPaperStatus, TradeHistoryItem } from '../api/client'
+import { getPaperStatus, startPaper, stopPaper, getManualOrders, getTradeHistory, placePaperOrder } from '../api/client'
+import type { PaperStatus, ManualPaperStatus, ManualOrder, TradeHistoryItem } from '../api/client'
+import SymbolSearchInput from '../components/SymbolSearchInput'
 import { usePersistedState } from '../hooks/usePersistedState'
 
 const STRATEGIES = ['rsi', 'ema', 'macd', 'breakout', 'supertrend', 'cta_trend', 'turtle', 'engulfing_scalp']
+
+/** Risk = |entry - stop|, reward = |target - entry| — direction-agnostic magnitude ratio. */
+function calcRR(entry: number, stopLoss: number, target: number): number | null {
+  if (!Number.isFinite(entry) || !Number.isFinite(stopLoss) || !Number.isFinite(target)) return null
+  const risk = Math.abs(entry - stopLoss)
+  if (risk <= 0) return null
+  return Math.abs(target - entry) / risk
+}
+
+/** Generic P&L % — works for both BUY/SELL since pnl is already correctly signed by the backend. */
+function pnlPercent(o: ManualOrder, pnl: number): number {
+  const basis = o.entry * o.quantity
+  return basis > 0 ? (pnl / basis) * 100 : 0
+}
 
 export default function PaperTrade() {
   const [status, setStatus] = useState<PaperStatus | null>(null)
@@ -18,6 +33,40 @@ export default function PaperTrade() {
   const [manual, setManual] = useState<ManualPaperStatus | null>(null)
   const [persistedTrades, setPersistedTrades] = useState<TradeHistoryItem[]>([])
   const [persistedTotal, setPersistedTotal] = useState(0)
+
+  // Manual entry form — Entry/Stop Loss/Target with a live-calculated RR.
+  const [entrySymbol, setEntrySymbol] = usePersistedState('paper.manual.symbol', 'BTCUSDT')
+  const [direction, setDirection] = useState<'BUY' | 'SELL'>('BUY')
+  const [entryPrice, setEntryPrice] = useState('')
+  const [stopLossPrice, setStopLossPrice] = useState('')
+  const [targetPrice, setTargetPrice] = useState('')
+  const [riskPercent, setRiskPercent] = useState('1.0')
+  const [placing, setPlacing] = useState(false)
+  const [placeResult, setPlaceResult] = useState<{ ok: boolean; msg: string } | null>(null)
+
+  const entryNum = parseFloat(entryPrice)
+  const stopLossNum = parseFloat(stopLossPrice)
+  const targetNum = parseFloat(targetPrice)
+  const liveRR = calcRR(entryNum, stopLossNum, targetNum)
+  const formValid = Number.isFinite(entryNum) && Number.isFinite(stopLossNum) && Number.isFinite(targetNum) && liveRR !== null
+
+  async function placeManualOrder() {
+    setPlacing(true); setPlaceResult(null)
+    try {
+      const res = await placePaperOrder({
+        symbol: entrySymbol.toUpperCase(), strategy: 'manual', direction,
+        entry: entryNum, stop_loss: stopLossNum, take_profit: targetNum,
+        risk_percent: Number(riskPercent) || 1.0, interval: '1m',
+      })
+      setPlaceResult({ ok: true, msg: `Order #${res.data.id} placed — ${res.data.quantity.toFixed(6)} ${entrySymbol} @ $${res.data.entry.toFixed(2)}` })
+      setEntryPrice(''); setStopLossPrice(''); setTargetPrice('')
+      await refreshManual()
+    } catch (e: any) {
+      setPlaceResult({ ok: false, msg: e?.response?.data?.detail ?? 'Failed to place order' })
+    } finally {
+      setPlacing(false)
+    }
+  }
 
   async function refresh() {
     try { setStatus((await getPaperStatus()).data) } catch {}
@@ -110,6 +159,63 @@ export default function PaperTrade() {
           : 'bg-slate-500/10 text-slate-500 border-slate-500/20'}`}>
           {live ? '● WebSocket live' : '○ Polling'}
         </span>
+      </div>
+
+      {/* Manual trade entry — Entry/Stop Loss/Target with a live RR ratio */}
+      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5 space-y-4">
+        <h2 className="text-sm font-semibold text-slate-300">Manual Trade Entry</h2>
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Symbol</label>
+            <SymbolSearchInput value={entrySymbol} onCommit={setEntrySymbol} />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Direction</label>
+            <select value={direction} onChange={e => setDirection(e.target.value as 'BUY' | 'SELL')}
+              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none">
+              <option value="BUY">BUY</option>
+              <option value="SELL">SELL</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Entry</label>
+            <input type="number" value={entryPrice} onChange={e => setEntryPrice(e.target.value)} placeholder="0.00"
+              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Stop Loss</label>
+            <input type="number" value={stopLossPrice} onChange={e => setStopLossPrice(e.target.value)} placeholder="0.00"
+              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-red-400 outline-none focus:border-indigo-500" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Target</label>
+            <input type="number" value={targetPrice} onChange={e => setTargetPrice(e.target.value)} placeholder="0.00"
+              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-green-400 outline-none focus:border-indigo-500" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 mb-1 block">Risk %</label>
+            <input type="number" value={riskPercent} onChange={e => setRiskPercent(e.target.value)} step="0.1" min="0.1"
+              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500" />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="bg-[#0f1117] rounded-lg px-4 py-2 border border-[#2a2d3e]">
+            <span className="text-xs text-slate-500 mr-2">Risk/Reward</span>
+            <span className={`text-sm font-bold ${liveRR === null ? 'text-slate-600' : liveRR >= 2 ? 'text-green-400' : liveRR >= 1 ? 'text-yellow-400' : 'text-red-400'}`}>
+              {liveRR === null ? '—' : `1:${liveRR.toFixed(2)}`}
+            </span>
+          </div>
+          <button onClick={placeManualOrder} disabled={!formValid || placing}
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg">
+            {placing ? 'Placing…' : `Place ${direction} Order`}
+          </button>
+          {placeResult && (
+            <span className={`text-xs ${placeResult.ok ? 'text-green-400' : 'text-red-400'}`}>
+              {placeResult.ok ? '✓ ' : '⚠ '}{placeResult.msg}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Config */}
@@ -215,7 +321,7 @@ export default function PaperTrade() {
         </>
       )}
 
-      {/* Manual paper orders — from the "Place Paper Trade" button on Dashboard/Signals */}
+      {/* Manual paper orders — from the form above, or the "Place Paper Trade" button on Dashboard/Retail Dashboard */}
       {manual && (manual.open_orders.length > 0 || manual.closed_orders.length > 0) && (
         <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5">
           <h3 className="text-sm font-semibold text-slate-300 mb-3">
@@ -225,16 +331,23 @@ export default function PaperTrade() {
             <div className="mb-3">
               <p className="text-xs text-slate-500 mb-1">Open ({manual.open_orders.length})</p>
               <div className="space-y-1">
-                {manual.open_orders.map(o => (
-                  <div key={o.id} className="flex items-center gap-4 text-xs py-1 border-b border-[#2a2d3e]/50">
-                    <span className={`font-bold w-10 ${o.direction === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>{o.direction}</span>
-                    <span className="text-slate-300">{o.symbol}</span>
-                    <span className="text-slate-500">entry ${o.entry.toFixed(2)}</span>
-                    <span className="text-slate-500">now ${o.current_price.toFixed(2)}</span>
-                    <span className={`font-medium ${o.unrealized_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>${o.unrealized_pnl.toFixed(2)}</span>
-                    <span className="ml-auto text-indigo-400 text-xs px-1.5 py-0.5 rounded bg-indigo-500/10">MONITORING</span>
-                  </div>
-                ))}
+                {manual.open_orders.map(o => {
+                  const rr = calcRR(o.entry, o.stop_loss, o.take_profit)
+                  const pct = pnlPercent(o, o.unrealized_pnl)
+                  return (
+                    <div key={o.id} className="flex items-center gap-4 text-xs py-1 border-b border-[#2a2d3e]/50">
+                      <span className={`font-bold w-10 ${o.direction === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>{o.direction}</span>
+                      <span className="text-slate-300">{o.symbol}</span>
+                      <span className="text-slate-500">entry ${o.entry.toFixed(2)}</span>
+                      <span className="text-slate-500">now ${o.current_price.toFixed(2)}</span>
+                      <span className="text-slate-600">{rr !== null ? `1:${rr.toFixed(2)}` : '—'}</span>
+                      <span className={`font-medium ${o.unrealized_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {o.unrealized_pnl >= 0 ? '+' : ''}${o.unrealized_pnl.toFixed(2)} ({pct >= 0 ? '+' : ''}{pct.toFixed(2)}%)
+                      </span>
+                      <span className="ml-auto text-indigo-400 text-xs px-1.5 py-0.5 rounded bg-indigo-500/10">MONITORING</span>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -242,16 +355,21 @@ export default function PaperTrade() {
             <div>
               <p className="text-xs text-slate-500 mb-1">Closed ({manual.closed_orders.length})</p>
               <div className="space-y-1">
-                {[...manual.closed_orders].reverse().slice(0, 10).map(o => (
-                  <div key={o.id} className="flex items-center gap-4 text-xs py-1 border-b border-[#2a2d3e]/50">
-                    <span className={`font-bold w-10 ${o.direction === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>{o.direction}</span>
-                    <span className="text-slate-300">{o.symbol}</span>
-                    <span className="text-slate-500">${o.entry.toFixed(2)} → ${(o.exit_price ?? o.current_price).toFixed(2)}</span>
-                    <span className={`font-medium ${o.realized_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>${o.realized_pnl.toFixed(2)}</span>
-                    <span className="text-slate-600">{o.exit_reason}</span>
-                    <span className="ml-auto text-slate-700">{o.closed_at ? new Date(o.closed_at).toLocaleTimeString() : ''}</span>
-                  </div>
-                ))}
+                {[...manual.closed_orders].reverse().slice(0, 10).map(o => {
+                  const pct = pnlPercent(o, o.realized_pnl)
+                  return (
+                    <div key={o.id} className="flex items-center gap-4 text-xs py-1 border-b border-[#2a2d3e]/50">
+                      <span className={`font-bold w-10 ${o.direction === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>{o.direction}</span>
+                      <span className="text-slate-300">{o.symbol}</span>
+                      <span className="text-slate-500">${o.entry.toFixed(2)} → ${(o.exit_price ?? o.current_price).toFixed(2)}</span>
+                      <span className={`font-medium ${o.realized_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {o.realized_pnl >= 0 ? '+' : ''}${o.realized_pnl.toFixed(2)} ({pct >= 0 ? '+' : ''}{pct.toFixed(2)}%)
+                      </span>
+                      <span className="text-slate-600">{o.exit_reason}</span>
+                      <span className="ml-auto text-slate-700">{o.closed_at ? new Date(o.closed_at).toLocaleTimeString() : ''}</span>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}
@@ -265,7 +383,7 @@ export default function PaperTrade() {
         </h3>
         {persistedTrades.length === 0 ? (
           <p className="text-slate-500 text-sm text-center py-6">
-            No paper trades yet. Start the auto-bot above, or use "Place Paper Trade" on a signal card (Dashboard / Signals).
+            No paper trades yet. Use the Manual Trade Entry form above, start the auto-bot, or use "Place Paper Trade" on a signal card (Dashboard / Retail Dashboard).
           </p>
         ) : (
           <div className="space-y-1">

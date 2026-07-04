@@ -7,6 +7,16 @@ export const api = axios.create({
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
+export interface ExchangeSymbol {
+  symbol: string; base_asset: string; quote_asset: string
+}
+
+export interface SymbolsResponse {
+  provider: string; symbols: ExchangeSymbol[]
+}
+
+export const getSymbols = () => api.get<SymbolsResponse>('/market/symbols')
+
 export interface Indicators {
   price: number; sma20: number; ema20: number; rsi14: number
   macd: number; signal: number; histogram: number
@@ -295,7 +305,7 @@ export interface ManualPaperStatus {
 
 export const placePaperOrder = (body: {
   symbol: string; strategy: string; direction: string
-  entry: number; stop_loss: number; take_profit: number; interval?: string
+  entry: number; stop_loss: number; take_profit: number; interval?: string; risk_percent?: number
 }) => api.post<ManualOrder>('/paper/order', body)
 
 export const getManualOrders = () =>

@@ -5,6 +5,7 @@ import {
 } from '../api/client'
 import type { BacktestRunItem, PortfolioAnalytics } from '../api/client'
 import PortfolioSummary from '../components/PortfolioSummary'
+import SymbolSearchInput from '../components/SymbolSearchInput'
 import { usePersistedState } from '../hooks/usePersistedState'
 
 const STRATEGIES = ['rsi', 'ema', 'macd', 'breakout', 'supertrend', 'cta_trend', 'turtle', 'engulfing_scalp']
@@ -199,8 +200,7 @@ export default function Backtest() {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div>
             <label className="text-xs text-slate-500 mb-1 block">Symbol</label>
-            <input value={symbol} onChange={e => setSymbol(e.target.value)}
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500" />
+            <SymbolSearchInput value={symbol} onCommit={setSymbol} />
           </div>
           <div>
             <label className="text-xs text-slate-500 mb-1 block">Strategy</label>

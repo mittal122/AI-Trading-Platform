@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { getSignal, scanAllStrategies, getMultiTimeframeSignals } from '../api/client'
 import type { TradingSignal } from '../api/client'
-import SignalCard from '../components/SignalCard'
-import SignalScanTable from '../components/SignalScanTable'
+import SignalCard from './SignalCard'
+import SignalScanTable from './SignalScanTable'
 import { usePersistedState } from '../hooks/usePersistedState'
 
 const STRATEGIES = ['rsi', 'ema', 'macd', 'breakout', 'supertrend', 'cta_trend', 'turtle', 'engulfing_scalp']
@@ -22,11 +22,14 @@ const STRATEGY_LABEL_TO_KEY: Record<string, string> = {
   'Engulfing Scalp': 'engulfing_scalp',
 }
 
-export default function Signals() {
-  const [symbolInput, setSymbolInput] = usePersistedState('signals.symbol', 'BTCUSDT')
-  const [symbol, setSymbol]     = useState(symbolInput)
-  const [strategy, setStrategy] = usePersistedState('signals.strategy', 'rsi')
-  const [interval, setInterval] = usePersistedState('signals.interval', '5m')
+/**
+ * Market Scan + Multi-Timeframe scan + signal detail — formerly the
+ * standalone Signals page, now embedded in Retail Dashboard (below the
+ * Analysis Tools section) and driven by the parent page's own symbol.
+ */
+export default function SignalsSection({ symbol }: { symbol: string }) {
+  const [strategy, setStrategy] = usePersistedState('retailDashboard.strategy', 'rsi')
+  const [interval, setInterval] = usePersistedState('retailDashboard.interval', '5m')
 
   const [signal, setSignal]     = useState<TradingSignal | null>(null)
   const [loading, setLoading]   = useState(false)
@@ -81,36 +84,16 @@ export default function Signals() {
   useEffect(() => { runTimeframes() }, [strategy, symbol])
   useEffect(() => { runDetail() }, [strategy, symbol, interval])
 
-  function submitSymbol() {
-    const next = symbolInput.trim().toUpperCase()
-    if (next) { setSymbolInput(next); setSymbol(next) }
-  }
-
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-xl font-bold text-white">Signals</h1>
-        <div className="flex items-center gap-2">
-          <input
-            value={symbolInput}
-            onChange={e => setSymbolInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && submitSymbol()}
-            onBlur={submitSymbol}
-            className="bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 w-32"
-          />
-          <button onClick={submitSymbol}
-            className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium rounded-lg">
-            Go
-          </button>
-        </div>
-      </div>
+    <div className="space-y-4">
+      <h2 className="text-sm font-semibold text-slate-300">Signals</h2>
 
       {/* Market Scan — every strategy, one timeframe */}
       <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5">
         <div className="flex items-center justify-between mb-1 flex-wrap gap-3">
-          <h2 className="text-sm font-semibold text-slate-300">
+          <h3 className="text-sm font-semibold text-slate-300">
             Market Scan — every strategy on {symbol} · {interval}
-          </h2>
+          </h3>
           <select value={interval} onChange={e => setInterval(e.target.value)}
             className="bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-2 py-1 text-xs text-white outline-none">
             {INTERVALS.map(i => <option key={i}>{i}</option>)}
@@ -131,9 +114,9 @@ export default function Signals() {
       {/* Multi-timeframe — one strategy, every timeframe */}
       <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5">
         <div className="flex items-center justify-between mb-1 flex-wrap gap-3">
-          <h2 className="text-sm font-semibold text-slate-300">
+          <h3 className="text-sm font-semibold text-slate-300">
             Multi-Timeframe — {strategy} on {symbol}
-          </h2>
+          </h3>
           <select value={strategy} onChange={e => setStrategy(e.target.value)}
             className="bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-2 py-1 text-xs text-white outline-none">
             {STRATEGIES.map(s => <option key={s}>{s}</option>)}

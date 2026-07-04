@@ -1364,6 +1364,63 @@ patterns, 0 malformed, several spot-checked by hand against raw OHLC),
 live `GET /patterns/scan` endpoint verified after a backend restart (the
 usual gotcha — code changes need a manual uvicorn restart).
 
+### Frontend restructure — Paper Trading form, Pattern Dashboard redesign, symbol search, Signals→Retail Dashboard merge (2026-07-04, same day)
+
+Four requests, all frontend-only — `GET /market/symbols` already existed
+and was fully wired backend-side (`binance_provider.py:get_symbols()` →
+`market_service.py` → the endpoint), just never called from the frontend.
+
+- **Paper Trading manual entry**: `PaperTrade.tsx` had no Entry/Stop Loss/
+  Target form at all — placing a manual order only ever happened via the
+  "Place Paper Trade" button on a `SignalCard`. Added a "Manual Trade Entry"
+  card (Symbol/Direction/Entry/Stop Loss/Target/Risk %) with a live-computed
+  R/R ratio (`calcRR()` — risk = |entry−stop|, reward = |target−entry|,
+  direction-agnostic) shown as you type, submitting via the existing
+  `POST /paper/order` (no backend change needed — `risk_percent` was
+  already an optional field, just never exposed in this UI). Also added
+  live P&L % to the existing open/closed manual-orders tables
+  (`pnlPercent()` — generic `pnl / (entry × quantity) × 100`, works for
+  both BUY/SELL since the backend already returns a correctly-signed pnl;
+  no backend field needed, purely derived client-side from fields already
+  returned).
+- **Pattern Dashboard redesign**: split into Bullish/Bearish sections
+  (`PatternSection` component), each sorted by timeframe using a fixed
+  chronological order (`INTERVAL_ORDER`, not alphabetical — `1m` before
+  `1d`). Removed the Price/Entry/Stop Loss/Target/R:R/Updated columns,
+  leaving just Timeframe/Pattern/Confidence. Filtered to `status ===
+  'CONFIRMED'` only. NEUTRAL-direction patterns (Doji, Spinning Top, Inside
+  Bar) never reach CONFIRMED by design (see the candlestick audit above),
+  so they drop out of this view automatically — no extra handling needed.
+- **Symbol search everywhere**: new `SymbolSearchInput` component
+  (`frontend/src/components/`) — fetches all ~1,300 tradeable symbols once
+  (module-level cache, shared across every screen instance) via the
+  now-consumed `GET /market/symbols`, filters client-side as you type,
+  dropdown with keyboard nav (arrows/Enter/Escape). Wired into Dashboard
+  (previously a **hardcoded `SYMBOL` module constant with no state at
+  all** — converted to real `usePersistedState`, all its effects/chart
+  re-run on symbol change), Backtest, Paper Trade (both the auto-bot config
+  and the new manual-entry form), Pattern Dashboard, and Retail Dashboard.
+- **Signals merged into Retail Dashboard**: `Signals.tsx` deleted; its
+  Market Scan + Multi-Timeframe scan + `SignalCard` detail logic extracted
+  into `frontend/src/components/SignalsSection.tsx`, which takes the
+  parent's `symbol` as a prop (shared, not duplicated state) but keeps its
+  own strategy/interval selection internally. Embedded into
+  `PatternAnalysis.tsx` directly below the Analysis Tools card (same left
+  column, above the fold — not full-width, since that column is already
+  the wide one). Page renamed "Pattern Analysis" → "Retail Dashboard"
+  (`PatternAnalysis.tsx`'s H1, kept the same `/patterns` route to avoid
+  breaking existing links/bookmarks — only the nav label and on-page title
+  changed). Sidebar's standalone "Signals" entry removed, `/signals` route
+  deleted from `App.tsx`.
+- Verified live via headless-Chrome: sidebar nav correct (no Signals entry,
+  "Retail Dashboard" label), Retail Dashboard renders with the embedded
+  Signals section, Pattern Dashboard shows Bullish(58)/Bearish(62) sections
+  with only Timeframe/Pattern/Confidence columns, Paper Trade's live RR
+  showed exactly `1:2.00` for entry=100/stop=95/target=110 (risk=5,
+  reward=10 — correct), symbol search returned real matches (`ETHBTC`,
+  `ETHUSDT`, etc.) for query "ETH". Frontend `tsc --noEmit` clean
+  throughout. No backend changes were needed for any of this.
+
 ---
 
 ## Immediate Next Task

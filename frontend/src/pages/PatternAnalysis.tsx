@@ -13,6 +13,8 @@ import type {
   Candle, DetectedPattern, AIPatternExplanation, AnalysisToolResult, AIToolExplanation, ChartAnnotations,
 } from '../api/client'
 import PatternInfoPanel from '../components/PatternInfoPanel'
+import SignalsSection from '../components/SignalsSection'
+import SymbolSearchInput from '../components/SymbolSearchInput'
 import ToolToggleBar from '../components/ToolToggleBar'
 import { usePersistedState } from '../hooks/usePersistedState'
 import { RectanglesPrimitive } from '../lib/rectanglePrimitive'
@@ -507,11 +509,6 @@ export default function PatternAnalysis() {
     rectPrimitiveRef.current?.setRectangles(allRectangles)
   }, [patterns, hiddenPatternIds, selectedId, toolResults])
 
-  function submitSymbol() {
-    const next = symbolInput.trim().toUpperCase()
-    if (next) { setSymbolInput(next); setSymbol(next) }
-  }
-
   function toggleFullscreen() {
     if (!chartWrapperRef.current) return
     if (document.fullscreenElement) {
@@ -544,19 +541,15 @@ export default function PatternAnalysis() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            Pattern Analysis
+            Retail Dashboard
             <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-400 bg-green-500/10 border border-green-500/30 rounded-full px-2 py-0.5">
               <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" /> LIVE
             </span>
           </h1>
-          <p className="text-slate-500 text-sm">Automatic chart pattern detection, FVGs, Smart Money structure, and toggleable analysis tools — AI-explained</p>
+          <p className="text-slate-500 text-sm">Chart patterns, FVGs, Smart Money structure, analysis tools, and signals — AI-explained</p>
         </div>
         <div className="flex items-center gap-2">
-          <input
-            value={symbolInput} onChange={e => setSymbolInput(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && submitSymbol()} onBlur={submitSymbol}
-            className="bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 w-32"
-          />
+          <SymbolSearchInput value={symbolInput} onCommit={s => { setSymbolInput(s); setSymbol(s) }} className="w-40" />
           <select value={interval} onChange={e => setInterval(e.target.value)}
             className="bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none">
             {INTERVALS.map(i => <option key={i}>{i}</option>)}
@@ -619,6 +612,10 @@ export default function PatternAnalysis() {
             )}
             <ToolToggleBar enabled={enabledSet} onToggle={toggleTool} loading={toolsLoading} readyKeys={toolResultKeys} />
           </div>
+
+          {/* Signals — merged in from the standalone Signals page, placed
+              directly below Analysis Tools, sharing this page's symbol. */}
+          <SignalsSection symbol={symbol} />
         </div>
 
         <div className="space-y-3 xl:sticky xl:top-6">

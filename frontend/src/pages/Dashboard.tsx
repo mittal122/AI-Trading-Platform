@@ -6,8 +6,9 @@ import type { Candle, TradingSignal, Indicators } from '../api/client'
 import SignalCard from '../components/SignalCard'
 import IndicatorPanel from '../components/IndicatorPanel'
 import RegimeBadge from '../components/RegimeBadge'
+import SymbolSearchInput from '../components/SymbolSearchInput'
+import { usePersistedState } from '../hooks/usePersistedState'
 
-const SYMBOL = 'BTCUSDT'
 const INTERVAL = '5m'
 const INITIAL_CANDLES = 500
 const PAGE_CANDLES = 500
@@ -28,6 +29,7 @@ function toBar(c: Candle) {
 
 export default function Dashboard() {
   const chartRef = useRef<HTMLDivElement>(null)
+  const [symbol, setSymbol] = usePersistedState('dashboard.symbol', 'BTCUSDT')
   const [signal, setSignal] = useState<TradingSignal | null>(null)
   const [indicators, setIndicators] = useState<Indicators | null>(null)
   const [loading, setLoading] = useState(true)
@@ -40,8 +42,8 @@ export default function Dashboard() {
     try {
       setRefreshing(true)
       const [sigRes, indRes] = await Promise.all([
-        getSignal('rsi', SYMBOL, INTERVAL),
-        getIndicators(SYMBOL, INTERVAL),
+        getSignal('rsi', symbol, INTERVAL),
+        getIndicators(symbol, INTERVAL),
       ])
       setSignal(sigRes.data)
       setIndicators(indRes.data.indicators)
@@ -84,7 +86,7 @@ export default function Dashboard() {
       try {
         const oldest = allCandles[0]
         const endTime = new Date(oldest.timestamp).getTime() - 1
-        const res = await getMarket(SYMBOL, INTERVAL, PAGE_CANDLES, endTime)
+        const res = await getMarket(symbol, INTERVAL, PAGE_CANDLES, endTime)
         const older = res.data.candles
 
         if (!Array.isArray(older) || older.length === 0) {
@@ -128,7 +130,7 @@ export default function Dashboard() {
       }
     }
 
-    getMarket(SYMBOL, INTERVAL, INITIAL_CANDLES).then((res) => {
+    getMarket(symbol, INTERVAL, INITIAL_CANDLES).then((res) => {
       const candles = res.data.candles
       if (Array.isArray(candles) && candles.length > 0) {
         allCandles = candles
@@ -144,7 +146,7 @@ export default function Dashboard() {
     const liveTimer = window.setInterval(async () => {
       if (allCandles.length === 0) return
       try {
-        const res = await getLiveMarket(SYMBOL, INTERVAL)
+        const res = await getLiveMarket(symbol, INTERVAL)
         const live = res.data
         candleSeries.update(toBar(live))
 
@@ -167,24 +169,25 @@ export default function Dashboard() {
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onVisibleRangeChange)
       chart.remove()
     }
-  }, [])
+  }, [symbol])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [symbol])
 
   // Auto-refresh every 60s
   useEffect(() => {
     const id = setInterval(load, 60_000)
     return () => clearInterval(id)
-  }, [])
+  }, [symbol])
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-white">Dashboard</h1>
-          <p className="text-slate-500 text-sm">{SYMBOL} · {INTERVAL} · RSI Strategy</p>
+          <p className="text-slate-500 text-sm">{INTERVAL} · RSI Strategy</p>
         </div>
         <div className="flex items-center gap-3">
+          <SymbolSearchInput value={symbol} onCommit={setSymbol} className="w-40" />
           {signal && <RegimeBadge regime={signal.regime} />}
           <button
             onClick={load}
@@ -199,7 +202,7 @@ export default function Dashboard() {
       {/* Chart */}
       <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-4">
         <div className="flex items-center justify-between mb-3">
-          <p className="text-xs text-slate-500">{SYMBOL} Price (TradingView Lightweight Charts)</p>
+          <p className="text-xs text-slate-500">{symbol} Price (TradingView Lightweight Charts)</p>
           {loadingOlder && <p className="text-xs text-indigo-400">Loading older candles…</p>}
           {!loadingOlder && historyExhausted && <p className="text-xs text-slate-600">Full history loaded</p>}
         </div>
@@ -220,7 +223,7 @@ export default function Dashboard() {
             {signal && <SignalCard signal={signal} />}
           </div>
           <div>
-            {indicators && <IndicatorPanel ind={indicators} symbol={SYMBOL} />}
+            {indicators && <IndicatorPanel ind={indicators} symbol={symbol} />}
           </div>
         </div>
       )}
