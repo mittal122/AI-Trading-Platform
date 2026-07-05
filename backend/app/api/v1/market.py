@@ -18,6 +18,8 @@ from backend.app.schemas.market_overview import (
     FundingResponse,
     MarketOverviewResponse,
     Ticker24h,
+    VolumeScanResponse,
+    VolumeScanRow,
     WatchlistResponse,
 )
 
@@ -30,6 +32,10 @@ _OVERVIEW_MIN_QUOTE_VOLUME = 1_000_000.0
 # Stablecoin-vs-USDT pairs (USDC/USDT etc.) always top volume rankings and
 # never move — pure noise in movers/volume-leader lists.
 _STABLE_BASES = {"USDC", "FDUSD", "TUSD", "DAI", "BUSD", "USDP", "EUR", "AEUR", "XUSD"}
+
+# Volume-spike scanner bounds — averaging window (candle count) and how many
+# symbols one scan may cover (each symbol is one Binance klines call).
+_VOLUME_SCAN_MAX_SYMBOLS = 50
 
 router = APIRouter(
     prefix="/market",
@@ -233,6 +239,42 @@ def buy_pressure(
     """Aggressive (taker) buy share of traded volume over the last N candles
     — who is hitting the market: buyers or sellers."""
     return BuyPressureResponse(**market_service.get_buy_pressure(symbol, interval, limit=limit))
+
+
+@router.get(
+    "/volume-scan",
+    response_model=VolumeScanResponse,
+)
+def volume_scan(
+    symbols: str = Query(description="Comma-separated symbols, e.g. BTCUSDT,ETHUSDT"),
+    interval: str = Query(default="5m"),
+    window: int = Query(default=20, ge=5, le=200),
+):
+    """Volume-spike + order-push scan across a watchlist on one timeframe.
+
+    One row per symbol: last closed candle's volume vs the prior `window`
+    candles' mean (spike ratio), how many orders (trades) were pushed, and the
+    biggest single-candle push in the window. Rows come back sorted by spike
+    ratio (hottest first) so the maximum order push floats to the top. A symbol
+    that fails to fetch returns a row with `error` set — it never kills the batch.
+    """
+    wanted = [s.strip().upper() for s in symbols.split(",") if s.strip()]
+    wanted = wanted[:_VOLUME_SCAN_MAX_SYMBOLS]
+
+    rows: list[VolumeScanRow] = []
+    for sym in wanted:
+        try:
+            rows.append(VolumeScanRow(**market_service.get_volume_scan(sym, interval, window=window)))
+        except Exception as exc:  # per-symbol isolation — a delisted/typo symbol can't 500 the scan
+            rows.append(VolumeScanRow(
+                symbol=sym, interval=interval, time="", ltp=0.0,
+                volume_window=0.0, volume_average=0.0, spike_ratio=0.0,
+                orders=0, avg_orders=0.0, max_push_volume=0.0, max_push_ratio=0.0,
+                error=str(exc) or "scan failed",
+            ))
+
+    rows.sort(key=lambda r: r.spike_ratio, reverse=True)
+    return VolumeScanResponse(interval=interval, window=window, rows=rows)
 
 
 @router.get(

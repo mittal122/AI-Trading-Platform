@@ -137,6 +137,55 @@ class BinanceProvider(BaseMarketProvider):
             "recent_ratios": recent,
         }
 
+    def get_volume_scan(self, symbol: str, interval: str, window: int = 20) -> dict:
+        """Volume-spike + order-push read for one symbol on one timeframe.
+
+        Compares the last CLOSED candle's activity to the mean of the prior
+        `window` closed candles. The most recent kline Binance returns is the
+        in-progress candle — its partial volume understates and would mask a
+        real spike — so this reads the last CLOSED candle and averages the
+        `window` candles before it. `number_of_trades` (kline field 8, dropped
+        by the standard OHLCV path) answers "how many orders were pushed"; the
+        biggest single-candle volume across the window is the "max order push".
+        """
+        klines = self.client.get_klines(
+            symbol=symbol.upper(),
+            interval=self.INTERVAL_MAP[interval],
+            limit=window + 2,  # +1 live candle we drop, +1 current closed candle
+        )
+        if len(klines) < 3:
+            raise ValueError("not enough candles for volume scan")
+
+        closed = klines[:-1]                       # drop the live in-progress candle
+        current = closed[-1]
+        window_candles = closed[-(window + 1):-1]  # the `window` candles before current
+
+        def _vol(k):
+            return float(k[5])
+
+        def _orders(k):
+            return int(k[8])
+
+        cur_vol = _vol(current)
+        n = len(window_candles)
+        avg_vol = sum(_vol(k) for k in window_candles) / n if n else 0.0
+        avg_orders = sum(_orders(k) for k in window_candles) / n if n else 0.0
+        max_push = max((_vol(k) for k in window_candles), default=0.0)
+
+        return {
+            "symbol": symbol.upper(),
+            "interval": interval,
+            "time": pd.to_datetime(current[6], unit="ms").isoformat(),  # close_time
+            "ltp": float(current[4]),
+            "volume_window": round(cur_vol, 4),
+            "volume_average": round(avg_vol, 4),
+            "spike_ratio": round(cur_vol / avg_vol, 2) if avg_vol > 0 else 0.0,
+            "orders": _orders(current),
+            "avg_orders": round(avg_orders, 1),
+            "max_push_volume": round(max_push, 4),
+            "max_push_ratio": round(max_push / avg_vol, 2) if avg_vol > 0 else 0.0,
+        }
+
     def get_funding(self, symbol: str) -> Optional[dict]:
         """Perpetual-futures funding rate + mark price (public fapi endpoint,
         no key). Positive funding = longs paying shorts (crowded long) —

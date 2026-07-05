@@ -63,3 +63,24 @@ class FundingResponse(BaseModel):
     funding_rate_annualized_pct: float
     mark_price: float
     next_funding_time: int
+
+
+class VolumeScanRow(BaseModel):
+    symbol: str
+    interval: str
+    time: str                         # last CLOSED candle's close time (ISO)
+    ltp: float                        # last traded price (that candle's close)
+    volume_window: float              # current candle volume (base asset)
+    volume_average: float             # mean volume over prior `window` candles
+    spike_ratio: float                # volume_window / volume_average
+    orders: int                       # number_of_trades on the current candle
+    avg_orders: float                 # mean trade count over the window
+    max_push_volume: float            # biggest single-candle volume in the window
+    max_push_ratio: float             # max_push_volume / volume_average
+    error: Optional[str] = None       # set instead of the numbers if the scan failed
+
+
+class VolumeScanResponse(BaseModel):
+    interval: str
+    window: int
+    rows: list[VolumeScanRow]

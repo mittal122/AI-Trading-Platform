@@ -12,6 +12,7 @@ import SignalCard from '../components/SignalCard'
 import IndicatorPanel from '../components/IndicatorPanel'
 import RegimeBadge from '../components/RegimeBadge'
 import SymbolSearchInput from '../components/SymbolSearchInput'
+import VolumeSpikeScanner from '../components/VolumeSpikeScanner'
 import { usePersistedState } from '../hooks/usePersistedState'
 
 const INTERVAL = '5m'
@@ -446,6 +447,9 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Volume spike scanner — order push across the watchlist */}
+      <VolumeSpikeScanner symbols={watchlist} onSelect={setSymbol} />
 
       {/* Top movers */}
       {overview && (

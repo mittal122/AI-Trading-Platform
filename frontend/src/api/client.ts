@@ -69,6 +69,17 @@ export interface Funding {
   mark_price: number; next_funding_time: number
 }
 
+export interface VolumeScanRow {
+  symbol: string; interval: string; time: string; ltp: number
+  volume_window: number; volume_average: number; spike_ratio: number
+  orders: number; avg_orders: number
+  max_push_volume: number; max_push_ratio: number
+  error: string | null
+}
+export interface VolumeScanResponse {
+  interval: string; window: number; rows: VolumeScanRow[]
+}
+
 export const getMarketOverview = () => api.get<MarketOverview>('/market/overview')
 export const getWatchlistTickers = (symbols: string[]) =>
   api.get<{ tickers: Ticker24h[] }>('/market/watchlist', { params: { symbols: symbols.join(',') } })
@@ -78,6 +89,10 @@ export const getBuyPressure = (symbol: string, interval = '5m') =>
   api.get<BuyPressure>('/market/buy-pressure', { params: { symbol, interval } })
 export const getFunding = (symbol: string) =>
   api.get<Funding | null>('/market/funding', { params: { symbol } })
+export const getVolumeScan = (symbols: string[], interval = '5m', window = 20) =>
+  api.get<VolumeScanResponse>('/market/volume-scan', {
+    params: { symbols: symbols.join(','), interval, window },
+  })
 
 export interface Indicators {
   price: number; sma20: number; ema20: number; rsi14: number

@@ -47,6 +47,9 @@ class MarketService:
     def get_agg_trades(self, symbol: str, limit: int = 500):
         return self.provider.get_agg_trades(symbol=symbol, limit=limit)
 
+    def get_volume_scan(self, symbol: str, interval: str, window: int = 20):
+        return self.provider.get_volume_scan(symbol=symbol, interval=interval, window=window)
+
     def get_funding(self, symbol: str):
         return self.provider.get_funding(symbol=symbol)
 
