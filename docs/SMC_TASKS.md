@@ -40,3 +40,4 @@ Status key: `[ ]` todo · `[~]` in progress · `[x]` done (committed) · `[!]` b
 ## Log
 
 - 2026-07-05: Design approved. Recovered corrupted git repo (31 zero-byte loose objects → moved aside + `git fetch origin` repopulated from remote `9a6481e`). Spec + task doc created.
+- 2026-07-05: **Phase A COMPLETE (A1–A15).** Full SMC engine ported to Python/FastAPI (12 service modules, all unit+live tested), `/smc/analyze` endpoint live-verified through the running Kronos-loaded server, and the SMC Analyzer frontend section (page + sidebar + chart with drawn zones/markers + verdict/plan/scores/order-flow cards) verified in headless Chrome with zero console errors. All 12 `test_smc_*.py` pass; existing tests unaffected. One commit per task, all pushed. **Next: Phase B (backtester §9 + signal scanner §13), then Phase C (full 27-layer chart).**
