@@ -12,7 +12,7 @@ Status key: `[ ]` todo · `[~]` in progress · `[x]` done (committed) · `[!]` b
 - [x] **A1 — Scaffold.** `core/smc_config.py` (all thresholds), `schemas/smc.py` (DTOs), empty `services/smc/` package, `api/v1/smc.py` router stub registered in `router.py`. Boots clean. *(weights sum 1.0, router `/smc` registered)*
 - [x] **A2 — Swing + market structure** (§5.2–5.3). Swings (reuse SwingDetector), HH/HL/LH/LL, BOS/CHoCH, trend state. `tests/test_smc_structure.py`. *(synthetic exact seq CHoCH→BOS→CHoCH→BOS; live 38 swings/17 events)*
 - [x] **A3 — Order blocks + FVG** (§5.4–5.5). OB detect + decisive-close mitigation; 3-candle FVG + fill. `tests/test_smc_ob_fvg.py`. *(wick≠mitigation verified; live 17 OBs/59 FVGs)*
-- [ ] **A4 — Liquidity pools + sweeps** (§5.6–5.7). EQH/EQL pools, confirmed sweeps, recency. `tests/test_smc_liquidity.py`.
+- [x] **A4 — Liquidity pools + sweeps** (§5.6–5.7). EQH/EQL pools, confirmed sweeps, recency. `tests/test_smc_liquidity.py`. *(synthetic sweep+bare-poke+recency verified; live pools legitimately rare on trending data — 0.3%-of-range tol, forms in ranges)*
 - [ ] **A5 — Dealing range + volume** (§5.1.6, §5 step7). Premium/discount/EQ; volume ratio + trendVol. `tests/test_smc_range_volume.py`.
 - [ ] **A6 — ATR + HTF trend** (§5.11–5.12). ATR(14) via IndicatorService; HTF resample + trend. `tests/test_smc_htf.py`.
 - [ ] **A7 — POI + inducements + demand/supply** (§5.8–5.10). `tests/test_smc_poi.py`.
