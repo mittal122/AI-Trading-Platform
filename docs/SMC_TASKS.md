@@ -16,7 +16,7 @@ Status key: `[ ]` todo · `[~]` in progress · `[x]` done (committed) · `[!]` b
 - [x] **A5 — Dealing range + volume** (§5.1.6, §5 step7). Premium/discount/EQ; volume ratio + trendVol. `tests/test_smc_range_volume.py`. *(pos→zone exact; trendVol ±1/spike; live sane)*
 - [x] **A6 — ATR + HTF trend** (§5.11–5.12). ATR(14) direct (simple mean of Wilder TR, not RMA); HTF in-memory resample + trend. `tests/test_smc_htf.py`. *(ATR/resample exact, synthetic HTF uptrend, gating, live consistent)*
 - [x] **A7 — POI + inducements + demand/supply** (§5.8–5.10). `tests/test_smc_poi.py`. *(intersection/union/dedup/liquidity, inducement gating, demand touch-mitigation; live 4 POIs/9 ind/3 zones)*
-- [ ] **A8 — Market-bias scoring + verdict** (§6.1–6.2). 6 components, weighted total, verdict + confidence. `tests/test_smc_scoring.py`.
+- [x] **A8 — Market-bias scoring + verdict** (§6.1–6.2). 6 components, weighted total, verdict + confidence. `tests/test_smc_scoring.py`. *(each component exact; formula 56.5→BULLISH/84.75; boundaries; live BULLISH)*
 - [ ] **A9 — Confluence checklist + vetoes + firing** (§6.3). 8 factors + 6 vetoes, per-side fires ≥70. `tests/test_smc_confluence.py`.
 - [ ] **A10 — Trade plan** (§7). Zone-priority entry, structural stop, TP1/TP2, R:R. `tests/test_smc_trade_plan.py`.
 - [ ] **A11 — Order flow** (§8). depth+buy_pressure → OrderFlow. `tests/test_smc_order_flow.py`.
