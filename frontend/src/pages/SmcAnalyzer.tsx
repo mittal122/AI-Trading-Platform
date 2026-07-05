@@ -167,15 +167,25 @@ export default function SmcAnalyzer() {
           <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-3">
             <div ref={chartRef} />
             {analysis && (
-              <div className="flex flex-wrap gap-x-4 gap-y-1 px-2 pt-2 text-[11px] text-slate-500">
-                <span><span className="text-amber-400">▢</span> POI</span>
-                <span><span className="text-green-400">▢</span> Bullish OB / demand / FVG</span>
-                <span><span className="text-red-400">▢</span> Bearish OB / supply / FVG</span>
-                <span><span className="text-slate-400">— —</span> Liquidity (EQH/EQL)</span>
-                <span className="ml-auto text-slate-600">
-                  Frozen {new Date(analysis.frozen_at).toLocaleTimeString()} · ATR {analysis.atr.toFixed(2)}
-                </span>
-              </div>
+              <>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 px-2 pt-2 text-[11px] text-slate-500">
+                  <span><span className="text-amber-400">▢</span> POI</span>
+                  <span><span className="text-green-400">▢</span> Bullish OB / demand / FVG</span>
+                  <span><span className="text-red-400">▢</span> Bearish OB / supply / FVG</span>
+                  <span><span className="text-amber-400">●</span> BOS / CHoCH</span>
+                  <span className="ml-auto text-slate-600">
+                    Frozen {new Date(analysis.frozen_at).toLocaleTimeString()} · ATR {analysis.atr.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 px-2 pt-1 text-[11px] text-slate-600">
+                  <span>Live structure:</span>
+                  <span>{analysis.order_blocks.filter(o => !o.mitigated).length} order blocks</span>
+                  <span>· {analysis.fvgs.filter(f => !f.filled).length} open FVGs</span>
+                  <span>· {analysis.pois.length} POIs</span>
+                  <span>· {analysis.supply_demand.filter(z => !z.mitigated).length} demand/supply</span>
+                  <span>· {analysis.sweeps.filter(s => s.recent).length} recent sweeps</span>
+                </div>
+              </>
             )}
           </div>
 
@@ -199,6 +209,13 @@ export default function SmcAnalyzer() {
           {analysis?.short_plan && <SmcTradePlanCard plan={analysis.short_plan} />}
           {analysis?.verdict && <SmcScoreBars v={analysis.verdict} />}
           {analysis?.order_flow && <SmcOrderFlowPanel of={analysis.order_flow} />}
+          {analysis && (
+            <p className="text-[11px] text-slate-600 leading-relaxed px-1">
+              For research and education only — not financial advice. This is a
+              deterministic rules-based read of past price action; markets can and
+              do move against any setup. Size and manage risk yourself.
+            </p>
+          )}
         </div>
       </div>
     </div>

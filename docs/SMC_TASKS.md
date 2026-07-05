@@ -23,7 +23,7 @@ Status key: `[ ]` todo · `[~]` in progress · `[x]` done (committed) · `[!]` b
 - [x] **A12 — Engine orchestration** (§5.1). `smc_engine.analyze()` → full AnalysisResult + reasons + freeze stamp + annotations. `tests/test_smc_engine.py`. *(~25ms full pipeline, invariants across 3 symbols, OF attach, walk-forward safe)*
 - [x] **A13 — API endpoints.** POST `/smc/analyze` + GET `/smc/analyze/{symbol}/{interval}`; live curl test through running server. *(live server verified: POST/GET full result, 400 bad interval, 422 limit; `tests/test_smc_endpoint.py`)*
 - [x] **A14 — Frontend section.** `SmcAnalyzer.tsx` page, sidebar entry, route, `client.ts` fns; Verdict card · both TradePlan cards · 6 Score bars · OrderFlow panel · signal banner · lightweight-charts with OB/FVG/POI zones + BOS/CHoCH markers + plan levels. `tsc` clean. *(verified in headless Chrome: renders, 0 console errors, zones/markers drawn, matches design system)*
-- [ ] **A15 — Reasons/explanation panel + polish.** "Why this signal" + veto reasons surfaced; simple UX pass for non-expert users.
+- [x] **A15 — Reasons/explanation panel + polish.** "Why this read" reasons + veto reasons surfaced; plain-language factor labels; live-structure counts strip; bias-vs-signal explainer; risk disclaimer. *(verified in browser)*
 
 ## Phase B — Backtester + scanner
 
