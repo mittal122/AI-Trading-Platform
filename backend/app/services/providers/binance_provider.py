@@ -97,6 +97,25 @@ class BinanceProvider(BaseMarketProvider):
             "levels": limit,
         }
 
+    def get_raw_order_book(self, symbol: str, limit: int = 100) -> dict:
+        """Raw resting book levels (price, quantity) per side — the SMC
+        order-flow analysis band-filters and finds walls itself."""
+        ob = self.client.get_order_book(symbol=symbol.upper(), limit=limit)
+        return {
+            "bids": [(float(p), float(q)) for p, q in ob["bids"]],
+            "asks": [(float(p), float(q)) for p, q in ob["asks"]],
+        }
+
+    def get_agg_trades(self, symbol: str, limit: int = 500) -> list[dict]:
+        """Recent aggregate trades for taker-aggression / CVD. `is_buyer_maker`
+        True => the aggressor (taker) was the seller."""
+        trades = self.client.get_aggregate_trades(symbol=symbol.upper(), limit=limit)
+        return [
+            {"price": float(t["p"]), "qty": float(t["q"]),
+             "is_buyer_maker": bool(t["m"])}
+            for t in trades
+        ]
+
     def get_buy_pressure(self, symbol: str, interval: str, limit: int = 20) -> dict:
         """Aggressive (taker) buy share of volume over the last N candles —
         the klines already carry taker-buy volume; the standard OHLCV path

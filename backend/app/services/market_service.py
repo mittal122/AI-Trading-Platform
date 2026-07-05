@@ -41,6 +41,12 @@ class MarketService:
     def get_buy_pressure(self, symbol: str, interval: str, limit: int = 20):
         return self.provider.get_buy_pressure(symbol=symbol, interval=interval, limit=limit)
 
+    def get_raw_order_book(self, symbol: str, limit: int = 100):
+        return self.provider.get_raw_order_book(symbol=symbol, limit=limit)
+
+    def get_agg_trades(self, symbol: str, limit: int = 500):
+        return self.provider.get_agg_trades(symbol=symbol, limit=limit)
+
     def get_funding(self, symbol: str):
         return self.provider.get_funding(symbol=symbol)
 
