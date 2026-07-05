@@ -12,6 +12,7 @@ from backend.app.api.v1.patterns import router as patterns_router
 from backend.app.api.v1.portfolio import router as portfolio_router
 from backend.app.api.v1.prediction import router as prediction_router
 from backend.app.api.v1.settings import router as settings_router
+from backend.app.api.v1.smc import router as smc_router
 from backend.app.api.v1.strategy import router as strategy_router
 from backend.app.api.v1.trades import router as trades_router
 
@@ -23,6 +24,7 @@ api_router.include_router(indicator_router)
 api_router.include_router(strategy_router)
 api_router.include_router(patterns_router)
 api_router.include_router(analysis_router)
+api_router.include_router(smc_router)
 api_router.include_router(portfolio_router)
 api_router.include_router(ai_router)
 api_router.include_router(paper_router)

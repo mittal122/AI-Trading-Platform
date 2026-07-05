@@ -9,7 +9,7 @@ Status key: `[ ]` todo · `[~]` in progress · `[x]` done (committed) · `[!]` b
 
 ## Phase A — Engine + minimal trustworthy UI
 
-- [ ] **A1 — Scaffold.** `core/smc_config.py` (all thresholds), `schemas/smc.py` (DTOs), empty `services/smc/` package, `api/v1/smc.py` router stub registered in `router.py`. Boots clean.
+- [x] **A1 — Scaffold.** `core/smc_config.py` (all thresholds), `schemas/smc.py` (DTOs), empty `services/smc/` package, `api/v1/smc.py` router stub registered in `router.py`. Boots clean. *(weights sum 1.0, router `/smc` registered)*
 - [ ] **A2 — Swing + market structure** (§5.2–5.3). Swings (reuse SwingDetector), HH/HL/LH/LL, BOS/CHoCH, trend state. `tests/test_smc_structure.py`.
 - [ ] **A3 — Order blocks + FVG** (§5.4–5.5). OB detect + decisive-close mitigation; 3-candle FVG + fill. `tests/test_smc_ob_fvg.py`.
 - [ ] **A4 — Liquidity pools + sweeps** (§5.6–5.7). EQH/EQL pools, confirmed sweeps, recency. `tests/test_smc_liquidity.py`.
