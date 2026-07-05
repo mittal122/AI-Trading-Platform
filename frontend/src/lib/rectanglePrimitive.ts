@@ -49,8 +49,13 @@ class RectangleRenderer implements IPrimitivePaneRenderer {
 
         const x1raw = timeScale.timeToCoordinate(r.time1)
         const x2raw = timeScale.timeToCoordinate(r.time2)
-        // Off-screen to one side (e.g. zone started before the visible
-        // range) — clip to the canvas edge instead of skipping the zone.
+        // Entirely outside the visible range (both endpoints off-screen) —
+        // skip it. Otherwise the null->0 / null->width fallback below would
+        // stretch an off-screen zone edge-to-edge across the whole chart
+        // (that's the "full-width green band" bug for scrolled-away patterns).
+        if (x1raw === null && x2raw === null) continue
+        // Partially visible (started before / ends after the visible range) —
+        // clip that one side to the canvas edge instead of dropping the zone.
         const x1 = x1raw === null ? 0 : x1raw
         const x2 = x2raw === null ? width : x2raw
 
