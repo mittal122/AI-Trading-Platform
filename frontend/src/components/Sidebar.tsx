@@ -7,6 +7,7 @@ const LINKS = [
   { to: '/paper',     label: 'Paper Trade',icon: '◻'  },
   { to: '/patterns',  label: 'Retail Dashboard', icon: '◭'  },
   { to: '/patterns/dashboard', label: 'Pattern Dashboard', icon: '☰'  },
+  { to: '/smc',       label: 'SMC Analyzer', icon: '◆'  },
   { to: '/settings',  label: 'Settings',   icon: '⚙'  },
 ]
 

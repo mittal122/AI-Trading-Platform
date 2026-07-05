@@ -383,3 +383,73 @@ export const saveBinanceKeys = (body: { api_key: string; api_secret: string }) =
 
 export const deleteBinanceKeys = () =>
   api.delete<BinanceKeyStatus>('/settings/binance-keys')
+
+// ── SMC Analyzer ─────────────────────────────────────────────────────────────
+// Faithful client types for the SMC engine (backend/app/schemas/smc.py). One
+// GET returns the full frozen analysis: candles + every detection + both scoring
+// systems + both trade plans + order flow, so the chart and plan never drift.
+
+export type SmcDir = 'BULLISH' | 'BEARISH' | 'NEUTRAL'
+export type SmcSide = 'long' | 'short'
+export type SmcStrength = 'STRONG' | 'MODERATE' | 'WEAK' | 'REJECTED'
+
+export interface SmcCandle {
+  time: string; open: number; high: number; low: number; close: number; volume: number
+}
+export interface SmcSwing { index: number; time: string; price: number; is_high: boolean; label?: string }
+export interface SmcStructureEvent { index: number; time: string; price: number; type: string }
+export interface SmcOrderBlock { index: number; time: string; top: number; bottom: number; direction: SmcDir; mitigated: boolean }
+export interface SmcFVG { index: number; time: string; top: number; bottom: number; direction: SmcDir; filled: boolean }
+export interface SmcLiquidityPool { price: number; direction: SmcDir; swing_indices: number[] }
+export interface SmcSweep { pool_price: number; direction: SmcDir; sweep_index: number; reversal_index: number; recent: boolean }
+export interface SmcDealingRange { range_hi: number; range_lo: number; equilibrium: number; position: number; zone: string }
+export interface SmcVolume { ratio: number; trend_vol: number; spike: boolean }
+export interface SmcPOI { top: number; bottom: number; direction: SmcDir; has_liquidity: boolean }
+export interface SmcInducement { index: number; time: string; price: number; direction: SmcDir; atr_distance: number }
+export interface SmcSupplyDemand { index: number; time: string; top: number; bottom: number; direction: SmcDir; mitigated: boolean }
+export interface SmcHTF { available: boolean; trend: 'up' | 'down' | 'neutral'; htf_bars: number }
+
+export interface SmcScoreComponent { name: string; raw: number; weight: number; contribution: number }
+export interface SmcVerdict {
+  label: SmcDir; total: number; confidence: number
+  confidence_label: 'high' | 'medium' | 'low'
+  breakdown: { components: SmcScoreComponent[]; total: number }
+}
+export interface SmcConfluenceFactor { name: string; points: number; hit: boolean; detail: string }
+export interface SmcSideConfluence {
+  side: SmcSide; total: number; fired: boolean; strength: SmcStrength
+  factors: SmcConfluenceFactor[]; reject_reasons: string[]
+}
+export interface SmcTradePlan {
+  side: SmcSide; entry: number; stop_loss: number
+  take_profit_1: number; take_profit_2: number; risk_reward: number; atr: number
+  source: string; zone_top?: number; zone_bottom?: number
+  strength: SmcStrength; strength_score: number; fired: boolean; note: string
+  confluence?: SmcSideConfluence
+}
+export interface SmcOrderFlow {
+  imbalance: number; cvd_ratio: number
+  pressure: 'buy' | 'sell' | 'balanced'
+  bid_notional: number; ask_notional: number
+  bid_walls: { price: number; qty: number; distance_pct: number }[]
+  ask_walls: { price: number; qty: number; distance_pct: number }[]
+}
+
+export interface SmcAnalysis {
+  symbol: string; interval: string; frozen_at: string; cutoff_price: number; atr: number
+  candles: SmcCandle[]
+  swings: SmcSwing[]; structure: SmcStructureEvent[]; trend: 'up' | 'down' | 'neutral'
+  order_blocks: SmcOrderBlock[]; fvgs: SmcFVG[]
+  liquidity_pools: SmcLiquidityPool[]; sweeps: SmcSweep[]
+  dealing_range?: SmcDealingRange; volume?: SmcVolume
+  pois: SmcPOI[]; inducements: SmcInducement[]; supply_demand: SmcSupplyDemand[]
+  htf?: SmcHTF
+  verdict?: SmcVerdict
+  long_plan?: SmcTradePlan; short_plan?: SmcTradePlan; primary: string
+  order_flow?: SmcOrderFlow
+  reasons: string[]
+  annotations?: ChartAnnotations
+}
+
+export const getSmcAnalysis = (symbol: string, interval: string, limit = 500) =>
+  api.get<SmcAnalysis>(`/smc/analyze/${symbol}/${interval}`, { params: { limit } })
