@@ -21,7 +21,7 @@ Status key: `[ ]` todo · `[~]` in progress · `[x]` done (committed) · `[!]` b
 - [x] **A10 — Trade plan** (§7). Zone-priority entry, structural stop, TP1/TP2, R:R. `tests/test_smc_trade_plan.py`. *(POI-priority, structural stop, TP1 liq-snap 2.4RR, risk floor, ATR fallback, short mirror; live both sides valid)*
 - [x] **A11 — Order flow** (§8). raw depth (band+walls) + aggTrades CVD → OrderFlow. `tests/test_smc_order_flow.py`. *(band/imbalance/walls/CVD exact, non-fatal trades, live fetch works)*
 - [x] **A12 — Engine orchestration** (§5.1). `smc_engine.analyze()` → full AnalysisResult + reasons + freeze stamp + annotations. `tests/test_smc_engine.py`. *(~25ms full pipeline, invariants across 3 symbols, OF attach, walk-forward safe)*
-- [ ] **A13 — API endpoints.** POST `/smc/analyze` + GET `/smc/analyze/{symbol}/{interval}`; live curl test through running server.
+- [x] **A13 — API endpoints.** POST `/smc/analyze` + GET `/smc/analyze/{symbol}/{interval}`; live curl test through running server. *(live server verified: POST/GET full result, 400 bad interval, 422 limit; `tests/test_smc_endpoint.py`)*
 - [ ] **A14 — Frontend section.** `SmcAnalyzer.tsx` page, sidebar entry, route, `client.ts` fns; Verdict card · TradePlan card · 6 Score bars · ActiveZones · OrderFlow panel · lightweight-charts with OB/FVG zones + SL/TP/liquidity lines. `tsc` clean.
 - [ ] **A15 — Reasons/explanation panel + polish.** "Why this signal" + veto reasons surfaced; simple UX pass for non-expert users.
 
