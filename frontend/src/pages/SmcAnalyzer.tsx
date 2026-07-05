@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import {
-  createChart, ColorType, CandlestickSeries, createSeriesMarkers,
+  createChart, ColorType, CandlestickSeries, LineSeries, createSeriesMarkers,
 } from 'lightweight-charts'
 import type {
   IChartApi, ISeriesApi, IPriceLine, ISeriesMarkersPluginApi, Time, UTCTimestamp,
+  MouseEventParams,
 } from 'lightweight-charts'
 import { RectanglesPrimitive } from '../lib/rectanglePrimitive'
 import type { RectangleSpec } from '../lib/rectanglePrimitive'
@@ -59,12 +60,30 @@ export default function SmcAnalyzer() {
   const [layers, setLayers] = usePersistedState<Record<LayerKey, boolean>>('smc.layers', DEFAULT_LAYERS)
   const toggle = (k: LayerKey) => setLayers(l => ({ ...l, [k]: !l[k] }))
 
+  // Drawn trend lines, persisted per symbol+interval (a map keyed by both).
+  type TL = { p1: { time: number; price: number }; p2: { time: number; price: number } }
+  const [allTrendlines, setAllTrendlines] = usePersistedState<Record<string, TL[]>>('smc.trendlines', {})
+  const tlKey = `${symbol}_${interval}`
+  const trendlines = allTrendlines[tlKey] ?? []
+  const [drawMode, setDrawMode] = useState(false)
+  const [isFull, setIsFull] = useState(false)
+
+  const chartCardRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<HTMLDivElement>(null)
   const chartApiRef = useRef<IChartApi | null>(null)
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
   const rectRef = useRef<RectanglesPrimitive | null>(null)
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const priceLinesRef = useRef<IPriceLine[]>([])
+  const trendSeriesRef = useRef<ISeriesApi<'Line'>[]>([])
+  const pendingPointRef = useRef<{ time: number; price: number } | null>(null)
+  const drawModeRef = useRef(false)
+  const addTrendlineRef = useRef<(tl: TL) => void>(() => {})
+
+  drawModeRef.current = drawMode
+  addTrendlineRef.current = (tl: TL) =>
+    setAllTrendlines(m => ({ ...m, [tlKey]: [...(m[tlKey] ?? []), tl] }))
+  const clearTrendlines = () => setAllTrendlines(m => ({ ...m, [tlKey]: [] }))
 
   const run = useCallback(async () => {
     setLoading(true); setError(null)
@@ -108,9 +127,34 @@ export default function SmcAnalyzer() {
     series.attachPrimitive(rect)
     rectRef.current = rect
 
-    const onResize = () => chart.applyOptions({ width: chartRef.current?.clientWidth ?? 600 })
-    window.addEventListener('resize', onResize)
-    return () => { window.removeEventListener('resize', onResize); chart.remove() }
+    // Trend-line drawing: two clicks (bar-time + price) define a segment.
+    const clickHandler = (param: MouseEventParams) => {
+      if (!drawModeRef.current || !param.point || param.time === undefined) return
+      const price = series.coordinateToPrice(param.point.y)
+      if (price === null) return
+      const pt = { time: param.time as number, price: price as number }
+      if (!pendingPointRef.current) { pendingPointRef.current = pt; return }
+      addTrendlineRef.current({ p1: pendingPointRef.current, p2: pt })
+      pendingPointRef.current = null
+    }
+    chart.subscribeClick(clickHandler)
+
+    const resize = () => {
+      const full = !!document.fullscreenElement
+      chart.applyOptions({
+        width: chartRef.current?.clientWidth ?? 600,
+        height: full ? Math.max(440, window.innerHeight - 150) : 440,
+      })
+    }
+    const onFsChange = () => { setIsFull(!!document.fullscreenElement); setTimeout(resize, 60) }
+    window.addEventListener('resize', resize)
+    document.addEventListener('fullscreenchange', onFsChange)
+    return () => {
+      window.removeEventListener('resize', resize)
+      document.removeEventListener('fullscreenchange', onFsChange)
+      chart.unsubscribeClick(clickHandler)
+      chart.remove()
+    }
   }, [])
 
   // Draw the analysis whenever it (or the layer toggles) change.
@@ -202,6 +246,27 @@ export default function SmcAnalyzer() {
     series.priceScale().applyOptions({ autoScale: true })
   }, [analysis, layers])
 
+  // Redraw user-drawn trend lines whenever they change (or the symbol/tf does).
+  useEffect(() => {
+    const chart = chartApiRef.current
+    if (!chart) return
+    trendSeriesRef.current.forEach(s => { try { chart.removeSeries(s) } catch { /* gone */ } })
+    trendSeriesRef.current = trendlines.map(tl => {
+      const s = chart.addSeries(LineSeries, { color: '#38bdf8', lineWidth: 2, lastValueVisible: false, priceLineVisible: false })
+      const pts = [
+        { time: tl.p1.time as UTCTimestamp, value: tl.p1.price },
+        { time: tl.p2.time as UTCTimestamp, value: tl.p2.price },
+      ].sort((a, b) => (a.time as number) - (b.time as number))
+      s.setData(pts)
+      return s
+    })
+  }, [trendlines])
+
+  async function toggleFullscreen() {
+    if (document.fullscreenElement) { await document.exitFullscreen() }
+    else if (chartCardRef.current) { await chartCardRef.current.requestFullscreen() }
+  }
+
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -231,8 +296,8 @@ export default function SmcAnalyzer() {
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-4 items-start">
         <div className="space-y-4">
-          <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-3">
-            {analysis && <SmcFreezeBar analysis={analysis} onReanalyze={run} />}
+          <div ref={chartCardRef} className={`bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-3 ${isFull ? 'flex flex-col justify-center' : ''}`}>
+            {analysis && !isFull && <SmcFreezeBar analysis={analysis} onReanalyze={run} />}
             {analysis && (
               <div className="flex items-center flex-wrap gap-1.5 px-1 pb-2">
                 {analysis.htf?.available && (
@@ -252,7 +317,26 @@ export default function SmcAnalyzer() {
                     {l.label}
                   </button>
                 ))}
+                <div className="ml-auto flex items-center gap-1.5">
+                  <button onClick={() => setDrawMode(d => !d)}
+                    className={`text-[11px] px-2 py-1 rounded-lg border ${
+                      drawMode ? 'bg-sky-500/20 border-sky-500/50 text-sky-300'
+                        : 'bg-[#0f1117] border-[#2a2d3e] text-slate-400 hover:text-white'}`}>
+                    ✎ Trend line
+                  </button>
+                  {trendlines.length > 0 && (
+                    <button onClick={clearTrendlines}
+                      className="text-[11px] px-2 py-1 rounded-lg border bg-[#0f1117] border-[#2a2d3e] text-slate-400 hover:text-red-400">Clear</button>
+                  )}
+                  <button onClick={toggleFullscreen}
+                    className="text-[11px] px-2 py-1 rounded-lg border bg-[#0f1117] border-[#2a2d3e] text-slate-400 hover:text-white">
+                    ⛶ {isFull ? 'Exit' : 'Fullscreen'}
+                  </button>
+                </div>
               </div>
+            )}
+            {drawMode && (
+              <p className="text-[11px] text-sky-300/80 px-1 pb-1">Click two points on the chart to draw a trend line.</p>
             )}
             <div ref={chartRef} />
             {analysis && (
@@ -278,26 +362,30 @@ export default function SmcAnalyzer() {
             )}
           </div>
 
-          {analysis && analysis.reasons.length > 0 && (
-            <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5">
-              <p className="text-xs uppercase tracking-widest text-slate-500 mb-2">Why this read</p>
-              <ul className="space-y-1">
-                {analysis.reasons.map((r, i) => (
-                  <li key={i} className="text-sm text-slate-300 flex gap-2">
-                    <span className="text-slate-600">·</span>{r}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+          {/* Fill the space under the chart with the context panels, so the
+              left column keeps pace with the taller decision column at right. */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+            {analysis && analysis.reasons.length > 0 && (
+              <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5">
+                <p className="text-xs uppercase tracking-widest text-slate-500 mb-2">Why this read</p>
+                <ul className="space-y-1">
+                  {analysis.reasons.map((r, i) => (
+                    <li key={i} className="text-sm text-slate-300 flex gap-2">
+                      <span className="text-slate-600">·</span>{r}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {analysis?.order_flow && <SmcOrderFlowPanel of={analysis.order_flow} />}
+            {analysis?.verdict && <div className="lg:col-span-2"><SmcScoreBars v={analysis.verdict} /></div>}
+          </div>
         </div>
 
         <div className="space-y-4">
           {analysis?.verdict && <SmcVerdictCard a={analysis} />}
           {analysis?.long_plan && <SmcTradePlanCard plan={analysis.long_plan} symbol={symbol} interval={interval} />}
           {analysis?.short_plan && <SmcTradePlanCard plan={analysis.short_plan} symbol={symbol} interval={interval} />}
-          {analysis?.verdict && <SmcScoreBars v={analysis.verdict} />}
-          {analysis?.order_flow && <SmcOrderFlowPanel of={analysis.order_flow} />}
           {analysis && (
             <p className="text-[11px] text-slate-600 leading-relaxed px-1">
               For research and education only — not financial advice. This is a

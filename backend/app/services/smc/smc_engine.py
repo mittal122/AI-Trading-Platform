@@ -150,21 +150,36 @@ def _build_reasons(verdict, trend, htf, long_plan, short_plan, primary) -> list[
 def _build_annotations(df, obs, fvgs, pois, supply_demand, pools, events,
                        long_plan, short_plan, primary) -> ChartAnnotations:
     end_time = df["timestamps"].iloc[-1].isoformat()
+    price = float(df["close"].iloc[-1])
+    n = len(df)
     zones: list[ZoneAnnotation] = []
     levels: list[LevelAnnotation] = []
     labels: list[LabelAnnotation] = []
 
-    for ob in obs:
-        if not ob.mitigated:
-            zones.append(ZoneAnnotation(label="Order Block", start_time=ob.time,
-                                        end_time=end_time, top=ob.top, bottom=ob.bottom,
-                                        bias=ob.direction.value))
-    for f in fvgs:
-        if not f.filled:
-            zones.append(ZoneAnnotation(label="FVG", start_time=f.time, end_time=end_time,
-                                        top=f.top, bottom=f.bottom, bias=f.direction.value))
+    def _time_at(idx) -> str:
+        if idx is None or idx < 0 or idx >= n:
+            return end_time
+        return df["timestamps"].iloc[idx].isoformat()
+
+    def _nearest(items, mid, limit):
+        # Only the few zones closest to current price — drawing every unmitigated
+        # OB/FVG extending to "now" stacks into a wall of full-width bands.
+        return sorted(items, key=lambda it: abs(mid(it) - price))[:limit]
+
+    for ob in _nearest([o for o in obs if not o.mitigated],
+                       lambda o: (o.top + o.bottom) / 2, 5):
+        zones.append(ZoneAnnotation(label="Order Block", start_time=ob.time,
+                                    end_time=end_time, top=ob.top, bottom=ob.bottom,
+                                    bias=ob.direction.value))
+    for f in _nearest([x for x in fvgs if not x.filled],
+                      lambda x: (x.top + x.bottom) / 2, 5):
+        zones.append(ZoneAnnotation(label="FVG", start_time=f.time, end_time=end_time,
+                                    top=f.top, bottom=f.bottom, bias=f.direction.value))
     for p in pois:
-        zones.append(ZoneAnnotation(label="POI", start_time=end_time, end_time=end_time,
+        # Anchor the POI box to the candle it formed from (its order block, else
+        # its FVG) — not the last candle, which mis-placed it at the right edge.
+        start = _time_at(p.order_block_index if p.order_block_index is not None else p.fvg_index)
+        zones.append(ZoneAnnotation(label="POI", start_time=start, end_time=end_time,
                                     top=p.top, bottom=p.bottom, bias=p.direction.value))
     for z in supply_demand:
         if not z.mitigated:
