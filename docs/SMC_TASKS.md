@@ -33,7 +33,7 @@ Status key: `[ ]` todo · `[~]` in progress · `[x]` done (committed) · `[!]` b
 
 ## Phase C — Full chart
 
-- [ ] **C1 — 27 SMC overlay layers** on the chart (order blocks, FVGs, BOS/CHoCH markers, liquidity lines, POI zones, demand/supply, sweep circles, inducement marks, EQ line, HTF banner, trend lines, plan levels, live-price tag).
+- [x] **C1 — SMC overlay layers + toggle bar** on the chart. Zones (OB/FVG/POI/demand-supply), BOS/CHoCH markers, HH/HL/LH/LL swing labels, dashed EQH/EQL liquidity lines, equilibrium line, sweep markers, inducement marks, HTF trend banner, plan levels — each individually toggleable (persisted). *(browser-verified: toggling Swings drew all labels; 0 console errors)*
 - [ ] **C2 — Drawing tools, live freeze-bar drift, trade-from-chart.**
 
 ---

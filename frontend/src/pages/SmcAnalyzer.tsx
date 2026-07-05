@@ -20,6 +20,18 @@ import SmcScannerPanel from '../components/smc/SmcScannerPanel'
 
 const INTERVALS = ['5m', '15m', '30m', '1h', '4h', '1d']
 
+type LayerKey = 'zones' | 'structure' | 'liquidity' | 'sweeps' | 'inducements' | 'equilibrium' | 'plan' | 'swings'
+const LAYER_DEFS: { key: LayerKey; label: string }[] = [
+  { key: 'zones', label: 'Zones' }, { key: 'structure', label: 'BOS/CHoCH' },
+  { key: 'plan', label: 'Trade plan' }, { key: 'liquidity', label: 'Liquidity' },
+  { key: 'equilibrium', label: 'Equilibrium' }, { key: 'sweeps', label: 'Sweeps' },
+  { key: 'swings', label: 'Swings' }, { key: 'inducements', label: 'Inducements' },
+]
+const DEFAULT_LAYERS: Record<LayerKey, boolean> = {
+  zones: true, structure: true, plan: true, liquidity: true,
+  equilibrium: true, sweeps: true, swings: false, inducements: false,
+}
+
 const toSec = (iso: string) => Math.floor(Date.parse(iso) / 1000) as UTCTimestamp
 
 // Zone colouring: POIs (the double-confluence signature zone) in gold, everything
@@ -43,6 +55,8 @@ export default function SmcAnalyzer() {
   const [analysis, setAnalysis] = useState<SmcAnalysis | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [layers, setLayers] = usePersistedState<Record<LayerKey, boolean>>('smc.layers', DEFAULT_LAYERS)
+  const toggle = (k: LayerKey) => setLayers(l => ({ ...l, [k]: !l[k] }))
 
   const chartRef = useRef<HTMLDivElement>(null)
   const chartApiRef = useRef<IChartApi | null>(null)
@@ -98,44 +112,94 @@ export default function SmcAnalyzer() {
     return () => { window.removeEventListener('resize', onResize); chart.remove() }
   }, [])
 
-  // Draw the analysis whenever it changes.
+  // Draw the analysis whenever it (or the layer toggles) change.
   useEffect(() => {
     const chart = chartApiRef.current, series = candleSeriesRef.current
     if (!chart || !series || !analysis) return
+    const candles = analysis.candles
+    const at = (idx: number) => toSec(candles[Math.max(0, Math.min(candles.length - 1, idx))].time)
 
-    series.setData(analysis.candles.map(c => ({
+    series.setData(candles.map(c => ({
       time: toSec(c.time), open: c.open, high: c.high, low: c.low, close: c.close,
     })))
 
-    const lastTime = toSec(analysis.candles[analysis.candles.length - 1].time)
-    const backstopTime = toSec(analysis.candles[Math.max(0, analysis.candles.length - 40)].time)
+    const lastTime = toSec(candles[candles.length - 1].time)
+    const backstopTime = toSec(candles[Math.max(0, candles.length - 40)].time)
 
-    const rects: RectangleSpec[] = (analysis.annotations?.zones ?? []).map(z => {
-      let t1 = toSec(z.start_time)
-      const t2 = lastTime
-      if (t1 >= t2) t1 = backstopTime
-      const [fill, border] = zoneColors(z.label, z.bias)
-      return { time1: t1, time2: t2, price1: z.top, price2: z.bottom, fillColor: fill, borderColor: border, label: z.label }
-    })
+    // ── Zones (order blocks / FVGs / POIs / demand-supply) ──
+    const rects: RectangleSpec[] = layers.zones
+      ? (analysis.annotations?.zones ?? []).map(z => {
+          let t1 = toSec(z.start_time)
+          if (t1 >= lastTime) t1 = backstopTime
+          const [fill, border] = zoneColors(z.label, z.bias)
+          return { time1: t1, time2: lastTime, price1: z.top, price2: z.bottom, fillColor: fill, borderColor: border, label: z.label }
+        })
+      : []
     rectRef.current?.setRectangles(rects)
 
+    // ── Price lines: liquidity (EQH/EQL), equilibrium, trade plan ──
     priceLinesRef.current.forEach(l => series.removePriceLine(l))
-    priceLinesRef.current = (analysis.annotations?.levels ?? []).map(lv => {
-      const st = LEVEL_STYLE[lv.label] ?? { color: '#64748b' }
-      return series.createPriceLine({
-        price: lv.price, color: st.color, lineWidth: 1,
-        lineStyle: st.dashed ? 2 : 0, axisLabelVisible: true, title: lv.label,
-      })
-    })
+    const lines: any[] = []
+    if (layers.liquidity) {
+      for (const p of analysis.liquidity_pools) {
+        lines.push(series.createPriceLine({
+          price: p.price, color: '#64748b', lineWidth: 1, lineStyle: 2,
+          axisLabelVisible: true, title: p.direction === 'BEARISH' ? 'EQH' : 'EQL',
+        }))
+      }
+    }
+    if (layers.equilibrium && analysis.dealing_range) {
+      lines.push(series.createPriceLine({
+        price: analysis.dealing_range.equilibrium, color: '#d4af37', lineWidth: 1,
+        lineStyle: 2, axisLabelVisible: true, title: 'EQ',
+      }))
+    }
+    if (layers.plan) {
+      for (const lv of analysis.annotations?.levels ?? []) {
+        const st = LEVEL_STYLE[lv.label]
+        if (!st) continue   // only plan levels here (Entry/Stop/TP*)
+        lines.push(series.createPriceLine({
+          price: lv.price, color: st.color, lineWidth: 1,
+          lineStyle: st.dashed ? 2 : 0, axisLabelVisible: true, title: lv.label,
+        }))
+      }
+    }
+    priceLinesRef.current = lines
 
-    markersRef.current?.setMarkers((analysis.annotations?.labels ?? []).map(l => ({
-      time: toSec(l.time), position: 'aboveBar' as const,
-      color: '#d4af37', shape: 'circle' as const, text: l.text,
-    })))
+    // ── Markers: structure, swings, sweeps, inducements ──
+    const markers: any[] = []
+    if (layers.structure) {
+      for (const l of analysis.annotations?.labels ?? [])
+        markers.push({ time: toSec(l.time), position: 'aboveBar', color: '#d4af37', shape: 'circle', text: l.text })
+    }
+    if (layers.swings) {
+      for (const s of analysis.swings) {
+        if (!s.label) continue
+        const bull = s.label === 'HH' || s.label === 'HL'
+        markers.push({ time: toSec(s.time), position: s.is_high ? 'aboveBar' : 'belowBar',
+          color: bull ? '#22c55e' : '#ef4444', shape: 'circle', text: s.label })
+      }
+    }
+    if (layers.sweeps) {
+      for (const sw of analysis.sweeps) {
+        const bull = sw.direction === 'BULLISH'
+        markers.push({ time: at(sw.reversal_index), position: bull ? 'belowBar' : 'aboveBar',
+          color: '#eab308', shape: 'circle', text: 'sweep' })
+      }
+    }
+    if (layers.inducements) {
+      for (const idm of analysis.inducements) {
+        const bull = idm.direction === 'BULLISH'
+        markers.push({ time: at(idm.index), position: bull ? 'belowBar' : 'aboveBar',
+          color: '#94a3b8', shape: 'square', text: 'IDM' })
+      }
+    }
+    markers.sort((a, b) => (a.time as number) - (b.time as number))
+    markersRef.current?.setMarkers(markers)
 
     chart.timeScale().fitContent()
     series.priceScale().applyOptions({ autoScale: true })
-  }, [analysis])
+  }, [analysis, layers])
 
   return (
     <div className="p-6 space-y-4">
@@ -167,6 +231,27 @@ export default function SmcAnalyzer() {
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-4 items-start">
         <div className="space-y-4">
           <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-3">
+            {analysis && (
+              <div className="flex items-center flex-wrap gap-1.5 px-1 pb-2">
+                {analysis.htf?.available && (
+                  <span className={`text-[11px] font-medium px-2 py-1 rounded-lg border mr-1 ${
+                    analysis.htf.trend === 'up' ? 'text-green-400 border-green-500/30'
+                      : analysis.htf.trend === 'down' ? 'text-red-400 border-red-500/30'
+                      : 'text-slate-400 border-slate-500/30'}`}>
+                    HTF {analysis.htf.trend}
+                  </span>
+                )}
+                {LAYER_DEFS.map(l => (
+                  <button key={l.key} onClick={() => toggle(l.key)}
+                    className={`text-[11px] px-2 py-1 rounded-lg border transition-colors ${
+                      layers[l.key]
+                        ? 'bg-indigo-500/15 border-indigo-500/40 text-indigo-300'
+                        : 'bg-[#0f1117] border-[#2a2d3e] text-slate-600 hover:text-slate-400'}`}>
+                    {l.label}
+                  </button>
+                ))}
+              </div>
+            )}
             <div ref={chartRef} />
             {analysis && (
               <>
