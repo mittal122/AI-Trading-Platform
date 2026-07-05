@@ -17,6 +17,7 @@ import SmcTradePlanCard from '../components/smc/SmcTradePlanCard'
 import SmcOrderFlowPanel from '../components/smc/SmcOrderFlowPanel'
 import SmcBacktestPanel from '../components/smc/SmcBacktestPanel'
 import SmcScannerPanel from '../components/smc/SmcScannerPanel'
+import SmcFreezeBar from '../components/smc/SmcFreezeBar'
 
 const INTERVALS = ['5m', '15m', '30m', '1h', '4h', '1d']
 
@@ -231,6 +232,7 @@ export default function SmcAnalyzer() {
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-4 items-start">
         <div className="space-y-4">
           <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-3">
+            {analysis && <SmcFreezeBar analysis={analysis} onReanalyze={run} />}
             {analysis && (
               <div className="flex items-center flex-wrap gap-1.5 px-1 pb-2">
                 {analysis.htf?.available && (
@@ -292,8 +294,8 @@ export default function SmcAnalyzer() {
 
         <div className="space-y-4">
           {analysis?.verdict && <SmcVerdictCard a={analysis} />}
-          {analysis?.long_plan && <SmcTradePlanCard plan={analysis.long_plan} />}
-          {analysis?.short_plan && <SmcTradePlanCard plan={analysis.short_plan} />}
+          {analysis?.long_plan && <SmcTradePlanCard plan={analysis.long_plan} symbol={symbol} interval={interval} />}
+          {analysis?.short_plan && <SmcTradePlanCard plan={analysis.short_plan} symbol={symbol} interval={interval} />}
           {analysis?.verdict && <SmcScoreBars v={analysis.verdict} />}
           {analysis?.order_flow && <SmcOrderFlowPanel of={analysis.order_flow} />}
           {analysis && (

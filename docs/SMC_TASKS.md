@@ -34,12 +34,14 @@ Status key: `[ ]` todo · `[~]` in progress · `[x]` done (committed) · `[!]` b
 ## Phase C — Full chart
 
 - [x] **C1 — SMC overlay layers + toggle bar** on the chart. Zones (OB/FVG/POI/demand-supply), BOS/CHoCH markers, HH/HL/LH/LL swing labels, dashed EQH/EQL liquidity lines, equilibrium line, sweep markers, inducement marks, HTF trend banner, plan levels — each individually toggleable (persisted). *(browser-verified: toggling Swings drew all labels; 0 console errors)*
-- [ ] **C2 — Drawing tools, live freeze-bar drift, trade-from-chart.**
+- [x] **C2 — Live freeze-bar drift + trade-from-chart.** FreezeBar (frozen vs live price polled every 5s, drift %, plan-level-cross warning, Re-analyze). One-click "Paper-trade this plan" on each plan card → opens a paper order via ManualPaperTrader. *(browser-verified: live drift updates, paper order #1 opened)*
+      DEFERRED (disclosed): freehand drawing tools (pen/trendline/rectangle/eraser) — heavy, low value for an auto-drawing SMC chart; the analysis zones/levels are drawn automatically already.
 
 ---
 
 ## Log
 
 - 2026-07-05: Design approved. Recovered corrupted git repo (31 zero-byte loose objects → moved aside + `git fetch origin` repopulated from remote `9a6481e`). Spec + task doc created.
+- 2026-07-05: **Phase C COMPLETE (C1–C2).** Chart overlay layers + toggle bar (swings/sweeps/inducements/EQ/liquidity/HTF banner) + freeze-bar live drift + one-click paper-trade-this-plan. Freehand drawing tools deferred (disclosed). **All 3 phases (A/B/C) of the SMC Analyzer now shipped.**
 - 2026-07-05: **Phase B COMPLETE (B1–B2).** Backtester (§9, walk-forward, BacktestPanel) + signal scanner (§13, 60s scheduler, watchlist/settings/signals, accept→paper-trade). All tested + live-verified. **Next: Phase C (full 27-layer chart + drawing tools).**
 - 2026-07-05: **Phase A COMPLETE (A1–A15).** Full SMC engine ported to Python/FastAPI (12 service modules, all unit+live tested), `/smc/analyze` endpoint live-verified through the running Kronos-loaded server, and the SMC Analyzer frontend section (page + sidebar + chart with drawn zones/markers + verdict/plan/scores/order-flow cards) verified in headless Chrome with zero console errors. All 12 `test_smc_*.py` pass; existing tests unaffected. One commit per task, all pushed. **Next: Phase B (backtester §9 + signal scanner §13), then Phase C (full 27-layer chart).**

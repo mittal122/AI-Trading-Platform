@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { placePaperOrder } from '../../api/client'
 import type { SmcTradePlan } from '../../api/client'
 
 const STRENGTH_STYLE: Record<string, string> = {
@@ -30,10 +32,31 @@ function Level({ label, value, color }: { label: string; value: number; color: s
   )
 }
 
-export default function SmcTradePlanCard({ plan }: { plan: SmcTradePlan }) {
+export default function SmcTradePlanCard({ plan, symbol, interval }: {
+  plan: SmcTradePlan; symbol?: string; interval?: string
+}) {
   const isLong = plan.side === 'long'
   const sideColor = isLong ? 'text-green-400' : 'text-red-400'
   const conf = plan.confluence
+  const [placing, setPlacing] = useState(false)
+  const [placed, setPlaced] = useState<string | null>(null)
+
+  async function paperTrade() {
+    if (!symbol) return
+    setPlacing(true); setPlaced(null)
+    try {
+      const { data } = await placePaperOrder({
+        symbol, strategy: 'smc', direction: isLong ? 'BUY' : 'SELL',
+        entry: plan.entry, stop_loss: plan.stop_loss, take_profit: plan.take_profit_1,
+        interval: interval ?? '1h', risk_percent: 2,
+      })
+      setPlaced(`Paper order #${data.id} opened`)
+    } catch (e: any) {
+      setPlaced(e?.response?.data?.detail ?? 'Could not place order')
+    } finally {
+      setPlacing(false)
+    }
+  }
 
   return (
     <div className={`bg-[#1a1d27] border rounded-xl p-4 ${
@@ -80,6 +103,17 @@ export default function SmcTradePlanCard({ plan }: { plan: SmcTradePlan }) {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {symbol && (
+        <div className="mt-3 flex items-center gap-3">
+          <button onClick={paperTrade} disabled={placing}
+            className={`px-3 py-1.5 text-xs font-medium rounded-lg disabled:opacity-50 ${
+              isLong ? 'bg-green-600/80 hover:bg-green-600' : 'bg-red-600/80 hover:bg-red-600'} text-white`}>
+            {placing ? 'Placing…' : 'Paper-trade this plan'}
+          </button>
+          {placed && <span className="text-xs text-slate-400">{placed}</span>}
         </div>
       )}
     </div>
