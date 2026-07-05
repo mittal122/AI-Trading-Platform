@@ -28,7 +28,8 @@ Status key: `[ ]` todo · `[~]` in progress · `[x]` done (committed) · `[!]` b
 ## Phase B — Backtester + scanner
 
 - [x] **B1 — Backtester** (§9). `smc/backtest.py`, POST `/smc/backtest`, BacktestPanel UI (SVG equity curve + stats + trades table). `tests/test_smc_backtest.py`. *(metrics exact, walk-forward ~2-3s, deterministic; live curl 200; browser-verified panel)*
-- [ ] **B2 — Signal scanner** (§13). DB tables (watchlist/settings/signals), scheduled 60s scan, signal endpoints, scanner UI. Single-operator/global (auth adaptation).
+- [x] **B2 — Signal scanner** (§13). DB tables (watchlist/settings/signals, single-operator/global), 60s asyncio scheduler, candle-close gate, weekly cap + 24h dedup, accept→paper-trade / dismiss, 11 endpoints, scanner UI panel. `tests/test_smc_scanner.py`. *(CRUD/clamp/gate/lifecycle tested; live curl + browser verified; accept opened paper #1)*
+      NOTE: new tables auto-created via `create_tables()` (dev/SQLite). For prod Postgres, autogenerate an Alembic migration for `smc_watchlist`/`smc_scanner_settings`/`smc_signals`.
 
 ## Phase C — Full chart
 
@@ -40,4 +41,5 @@ Status key: `[ ]` todo · `[~]` in progress · `[x]` done (committed) · `[!]` b
 ## Log
 
 - 2026-07-05: Design approved. Recovered corrupted git repo (31 zero-byte loose objects → moved aside + `git fetch origin` repopulated from remote `9a6481e`). Spec + task doc created.
+- 2026-07-05: **Phase B COMPLETE (B1–B2).** Backtester (§9, walk-forward, BacktestPanel) + signal scanner (§13, 60s scheduler, watchlist/settings/signals, accept→paper-trade). All tested + live-verified. **Next: Phase C (full 27-layer chart + drawing tools).**
 - 2026-07-05: **Phase A COMPLETE (A1–A15).** Full SMC engine ported to Python/FastAPI (12 service modules, all unit+live tested), `/smc/analyze` endpoint live-verified through the running Kronos-loaded server, and the SMC Analyzer frontend section (page + sidebar + chart with drawn zones/markers + verdict/plan/scores/order-flow cards) verified in headless Chrome with zero console errors. All 12 `test_smc_*.py` pass; existing tests unaffected. One commit per task, all pushed. **Next: Phase B (backtester §9 + signal scanner §13), then Phase C (full 27-layer chart).**

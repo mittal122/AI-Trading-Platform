@@ -372,3 +372,46 @@ class BacktestResult(BaseModel):
     sharpe_ratio: float = 0.0
     equity_curve: list[float] = []
     trades: list[BacktestTrade] = []
+
+
+# --------------------------------------------------------------------------- #
+# Signal scanner (§13)
+# --------------------------------------------------------------------------- #
+class WatchItem(BaseModel):
+    id: int
+    symbol: str
+    interval: str
+    active: bool
+    last_scanned_candle_time: Optional[str] = None
+
+
+class AddWatchRequest(BaseModel):
+    symbol: str
+    interval: str = "1h"
+
+
+class ScannerSettings(BaseModel):
+    enabled: bool = False
+    max_signals_per_week: int = 4
+
+
+class SignalOut(BaseModel):
+    id: int
+    symbol: str
+    interval: str
+    side: Side
+    entry: float
+    stop_loss: float
+    take_profit_1: float
+    take_profit_2: float
+    score: int
+    reason_note: str
+    candle_time: str
+    status: str
+    paired_trade_id: Optional[int] = None
+    created_at: str
+
+
+class AcceptSignalRequest(BaseModel):
+    capital: float = 1000.0
+    risk_pct: float = 2.0

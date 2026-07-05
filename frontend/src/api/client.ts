@@ -476,3 +476,31 @@ export const runSmcBacktest = (body: {
   symbol: string; interval: string; limit?: number
   capital?: number; risk_pct?: number; max_trades?: number; cooldown?: number
 }) => api.post<SmcBacktestResult>('/smc/backtest', body)
+
+// ── SMC Signal Scanner ───────────────────────────────────────────────────────
+export interface SmcWatchItem {
+  id: number; symbol: string; interval: string; active: boolean
+  last_scanned_candle_time?: string | null
+}
+export interface SmcScannerSettings { enabled: boolean; max_signals_per_week: number }
+export interface SmcSignal {
+  id: number; symbol: string; interval: string; side: SmcSide
+  entry: number; stop_loss: number; take_profit_1: number; take_profit_2: number
+  score: number; reason_note: string; candle_time: string
+  status: 'new' | 'accepted' | 'dismissed'; paired_trade_id?: number | null; created_at: string
+}
+
+export const getSmcWatchlist = () => api.get<SmcWatchItem[]>('/smc/watchlist')
+export const addSmcWatch = (symbol: string, interval: string) =>
+  api.post<SmcWatchItem>('/smc/watchlist', { symbol, interval })
+export const toggleSmcWatch = (id: number, active: boolean) =>
+  api.patch(`/smc/watchlist/${id}`, null, { params: { active } })
+export const removeSmcWatch = (id: number) => api.delete(`/smc/watchlist/${id}`)
+export const getScannerSettings = () => api.get<SmcScannerSettings>('/smc/scanner/settings')
+export const updateScannerSettings = (s: SmcScannerSettings) =>
+  api.put<SmcScannerSettings>('/smc/scanner/settings', s)
+export const scanSmcNow = () => api.post('/smc/scanner/scan')
+export const getSmcSignals = (limit = 100) => api.get<SmcSignal[]>('/smc/signals', { params: { limit } })
+export const acceptSmcSignal = (id: number, capital = 1000, risk_pct = 2) =>
+  api.post<SmcSignal>(`/smc/signals/${id}/accept`, { capital, risk_pct })
+export const dismissSmcSignal = (id: number) => api.patch<SmcSignal>(`/smc/signals/${id}/dismiss`)

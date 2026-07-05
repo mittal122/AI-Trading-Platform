@@ -16,6 +16,7 @@ import SmcScoreBars from '../components/smc/SmcScoreBars'
 import SmcTradePlanCard from '../components/smc/SmcTradePlanCard'
 import SmcOrderFlowPanel from '../components/smc/SmcOrderFlowPanel'
 import SmcBacktestPanel from '../components/smc/SmcBacktestPanel'
+import SmcScannerPanel from '../components/smc/SmcScannerPanel'
 
 const INTERVALS = ['5m', '15m', '30m', '1h', '4h', '1d']
 
@@ -221,6 +222,7 @@ export default function SmcAnalyzer() {
       </div>
 
       <SmcBacktestPanel symbol={symbol} interval={interval} />
+      <SmcScannerPanel />
     </div>
   )
 }

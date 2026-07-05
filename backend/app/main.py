@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import traceback
 from contextlib import asynccontextmanager
@@ -20,14 +21,36 @@ from backend.app.db.database import create_tables
 logger = logging.getLogger("uvicorn.error")
 
 
+async def _smc_scanner_loop():
+    """Background sweep of the SMC signal-scanner watchlist every 60s (§13).
+
+    Candle-close gated and enable-gated internally, so a disabled or idle
+    watchlist is cheap. One bad watch never kills the sweep (handled in the
+    service); a failure here is logged and the loop continues.
+    """
+    from backend.app.core.smc_config import smc_config
+    from backend.app.services.smc.scanner import scanner_service
+
+    while True:
+        try:
+            await scanner_service.scan_once()
+        except Exception:  # noqa: BLE001
+            logger.error("SMC scanner sweep failed:\n%s", traceback.format_exc())
+        await asyncio.sleep(smc_config.SCAN_INTERVAL_SECONDS)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     kronos.load()
     await create_tables()
     print("Database tables ready")
 
+    scanner_task = asyncio.create_task(_smc_scanner_loop())
+    print("SMC signal scanner started (60s)")
+
     yield
 
+    scanner_task.cancel()
     print("Shutting down...")
 
 

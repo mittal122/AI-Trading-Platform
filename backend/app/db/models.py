@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.db.database import Base
@@ -157,6 +157,62 @@ class ExchangeCredentials(Base):
     key_preview: Mapped[str] = mapped_column(String(20), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
+
+
+class SmcWatch(Base):
+    """A symbol/timeframe the SMC background scanner watches (§13).
+
+    Single-operator/global (no user_id) — matches this app's current
+    unauthenticated, single-deployment reality, same as the paper/live engines.
+    """
+
+    __tablename__ = "smc_watchlist"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False)
+    interval: Mapped[str] = mapped_column(String(5), nullable=False)
+    active: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # ISO timestamp of the last CLOSED candle already scanned — the candle-close
+    # gate skips a watch until a newer candle exists.
+    last_scanned_candle_time: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
+
+    __table_args__ = (UniqueConstraint("symbol", "interval", name="uq_smc_watch_symbol_interval"),)
+
+
+class SmcScannerSettings(Base):
+    """Global scanner settings — a single row (id=1)."""
+
+    __tablename__ = "smc_scanner_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    enabled: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # off by default
+    max_signals_per_week: Mapped[int] = mapped_column(Integer, nullable=False, default=4)  # clamped 2..4
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
+
+
+class SmcSignal(Base):
+    """A high-confluence fired setup the scanner stored for the user to act on."""
+
+    __tablename__ = "smc_signals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    interval: Mapped[str] = mapped_column(String(5), nullable=False)
+    side: Mapped[str] = mapped_column(String(5), nullable=False)  # long / short
+    entry: Mapped[float] = mapped_column(Float, nullable=False)
+    stop_loss: Mapped[float] = mapped_column(Float, nullable=False)
+    take_profit_1: Mapped[float] = mapped_column(Float, nullable=False)
+    take_profit_2: Mapped[float] = mapped_column(Float, nullable=False)
+    score: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    score_breakdown_json: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    candle_time: Mapped[str] = mapped_column(String(50), nullable=False, default="")
+    status: Mapped[str] = mapped_column(String(10), nullable=False, default="new", index=True)  # new/accepted/dismissed
+    paired_trade_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
+
+    __table_args__ = (Index("ix_smc_signals_symbol_status", "symbol", "status"),)
 
 
 class ApiKey(Base):
