@@ -312,3 +312,63 @@ class AnalysisRequest(BaseModel):
     symbol: str
     interval: str = "1h"
     limit: int = 500
+
+
+# --------------------------------------------------------------------------- #
+# Backtest (§9)
+# --------------------------------------------------------------------------- #
+class BacktestExitReason(str, Enum):
+    STOP_LOSS = "STOP_LOSS"
+    TAKE_PROFIT = "TAKE_PROFIT"
+    TIME_EXIT = "TIME_EXIT"
+    END_OF_DATA = "END_OF_DATA"
+
+
+class BacktestTrade(BaseModel):
+    side: Side
+    entry: float
+    stop_loss: float
+    take_profit: float
+    qty: float
+    entry_index: int
+    exit_index: int
+    entry_time: str
+    exit_time: str
+    exit_price: float
+    pnl: float
+    pnl_pct: float
+    exit_reason: BacktestExitReason
+    strength_score: int
+
+
+class BacktestRequest(BaseModel):
+    symbol: str
+    interval: str = "1h"
+    limit: int = 1000
+    capital: float = 100.0
+    risk_pct: float = 2.0
+    max_trades: int = 100
+    cooldown: int = 5
+
+
+class BacktestResult(BaseModel):
+    symbol: str
+    interval: str
+    candles: int
+    initial_capital: float
+    final_capital: float
+    total_trades: int
+    wins: int
+    losses: int
+    long_trades: int
+    short_trades: int
+    win_rate: float
+    avg_win: float
+    avg_loss: float
+    profit_factor: float
+    max_drawdown: float
+    total_pnl: float
+    roi: float
+    sharpe_ratio: float = 0.0
+    equity_curve: list[float] = []
+    trades: list[BacktestTrade] = []

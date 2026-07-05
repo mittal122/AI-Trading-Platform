@@ -453,3 +453,26 @@ export interface SmcAnalysis {
 
 export const getSmcAnalysis = (symbol: string, interval: string, limit = 500) =>
   api.get<SmcAnalysis>(`/smc/analyze/${symbol}/${interval}`, { params: { limit } })
+
+// ── SMC Backtest ─────────────────────────────────────────────────────────────
+export interface SmcBacktestTrade {
+  side: SmcSide; entry: number; stop_loss: number; take_profit: number; qty: number
+  entry_index: number; exit_index: number; entry_time: string; exit_time: string
+  exit_price: number; pnl: number; pnl_pct: number
+  exit_reason: 'STOP_LOSS' | 'TAKE_PROFIT' | 'TIME_EXIT' | 'END_OF_DATA'
+  strength_score: number
+}
+export interface SmcBacktestResult {
+  symbol: string; interval: string; candles: number
+  initial_capital: number; final_capital: number
+  total_trades: number; wins: number; losses: number
+  long_trades: number; short_trades: number
+  win_rate: number; avg_win: number; avg_loss: number
+  profit_factor: number; max_drawdown: number
+  total_pnl: number; roi: number; sharpe_ratio: number
+  equity_curve: number[]; trades: SmcBacktestTrade[]
+}
+export const runSmcBacktest = (body: {
+  symbol: string; interval: string; limit?: number
+  capital?: number; risk_pct?: number; max_trades?: number; cooldown?: number
+}) => api.post<SmcBacktestResult>('/smc/backtest', body)

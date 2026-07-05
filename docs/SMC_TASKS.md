@@ -27,7 +27,7 @@ Status key: `[ ]` todo · `[~]` in progress · `[x]` done (committed) · `[!]` b
 
 ## Phase B — Backtester + scanner
 
-- [ ] **B1 — Backtester** (§9). `smc/backtest.py`, POST `/smc/backtest`, BacktestPanel UI (equity curve + stats).
+- [x] **B1 — Backtester** (§9). `smc/backtest.py`, POST `/smc/backtest`, BacktestPanel UI (SVG equity curve + stats + trades table). `tests/test_smc_backtest.py`. *(metrics exact, walk-forward ~2-3s, deterministic; live curl 200; browser-verified panel)*
 - [ ] **B2 — Signal scanner** (§13). DB tables (watchlist/settings/signals), scheduled 60s scan, signal endpoints, scanner UI. Single-operator/global (auth adaptation).
 
 ## Phase C — Full chart

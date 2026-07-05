@@ -8,8 +8,11 @@ feeds it into the pipeline so the per-side confluence can use order flow.
 from fastapi import APIRouter, HTTPException, Query
 
 from backend.app.core.smc_config import smc_config
-from backend.app.schemas.smc import AnalysisRequest, AnalysisResult
+from backend.app.schemas.smc import (
+    AnalysisRequest, AnalysisResult, BacktestRequest, BacktestResult,
+)
 from backend.app.services.market_service import MarketService
+from backend.app.services.smc.backtest import run_backtest
 from backend.app.services.smc.order_flow import fetch_order_flow
 from backend.app.services.smc.smc_engine import analyze
 
@@ -62,3 +65,22 @@ def smc_analyze_get(
 ) -> AnalysisResult:
     """Path-parameter form of POST /smc/analyze."""
     return _run_analysis(symbol, interval, limit)
+
+
+@router.post("/backtest", response_model=BacktestResult)
+def smc_backtest(req: BacktestRequest) -> BacktestResult:
+    """Walk-forward replay of the SMC strategy over historical candles."""
+    if req.capital <= 0:
+        raise HTTPException(status_code=400, detail="capital must be > 0")
+    if not (0 < req.risk_pct <= 100):
+        raise HTTPException(status_code=400, detail="risk_pct must be in (0, 100]")
+    if req.interval not in _market.get_supported_intervals():
+        raise HTTPException(status_code=400, detail=f"Unsupported interval '{req.interval}'")
+    try:
+        df = _market.get_market_data(req.symbol, req.interval, req.limit)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=f"Market data error: {exc}") from exc
+    if df is None or len(df) < 100:
+        raise HTTPException(status_code=400, detail="Need at least 100 candles to backtest")
+    return run_backtest(req.symbol, req.interval, df, req.capital, req.risk_pct,
+                        req.max_trades, req.cooldown)

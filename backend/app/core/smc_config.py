@@ -150,5 +150,29 @@ class SmcConfig:
     OF_PRESSURE_THRESHOLD = 0.12    # imbalance > +0.12 buy / < -0.12 sell
     OF_AGG_TRADES_LIMIT = 500
 
+    # ===== §9 Backtester =====
+    BT_DEFAULT_CANDLES = 1000
+    BT_DEFAULT_CAPITAL = 100.0
+    BT_DEFAULT_RISK_PCT = 2.0
+    BT_DEFAULT_MAX_TRADES = 100
+    BT_DEFAULT_COOLDOWN = 5         # bars since the last signal before a new one
+    BT_WARMUP = 60                 # simulation starts here (min valid history)
+    BT_MAX_ENTRY_DIST_PCT = 5.0     # skip signals whose entry is >5% from price
+    BT_FILL_SCAN_BARS = 20         # bars to wait for price to reach the entry
+    BT_ANALYSIS_WINDOW = 500        # trailing window per bar (== live analysis)
+    BT_MAX_HOLD = {                 # per-timeframe maximum hold -> time exit
+        "1m": 240, "3m": 220, "5m": 200, "15m": 200, "30m": 150,
+        "1h": 100, "4h": 80, "1d": 30, "1w": 12,
+    }
+
+    # ===== §13 Signal scanner =====
+    SCAN_INTERVAL_SECONDS = 60      # @scheduled cadence
+    SCAN_MIN_CANDLES = 60
+    SCAN_FETCH_CANDLES = 500
+    SCAN_DEFAULT_MAX_PER_WEEK = 4    # clamped 2..4
+    SCAN_MAX_PER_WEEK_MIN = 2
+    SCAN_MAX_PER_WEEK_MAX = 4
+    SCAN_DEDUP_HOURS = 24          # no dup signal (same symbol+tf+side) within
+
 
 smc_config = SmcConfig()
