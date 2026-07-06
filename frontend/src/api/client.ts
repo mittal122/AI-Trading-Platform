@@ -74,6 +74,8 @@ export interface VolumeScanRow {
   volume_window: number; volume_average: number; spike_ratio: number
   orders: number; avg_orders: number
   max_push_volume: number; max_push_ratio: number
+  buy_ratio: number
+  quote_volume_24h?: number | null; blended_score?: number | null
   error: string | null
 }
 export interface VolumeScanResponse {

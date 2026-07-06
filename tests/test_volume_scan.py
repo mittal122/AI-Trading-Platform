@@ -17,6 +17,7 @@ assert row["symbol"] == "BTCUSDT"
 assert row["ltp"] > 0, "LTP must be a real price"
 assert row["volume_window"] >= 0 and row["volume_average"] > 0
 assert row["orders"] >= 0 and isinstance(row["orders"], int), "orders = number_of_trades, an int"
+assert 0.0 <= row["buy_ratio"] <= 1.0, "buy_ratio = taker-buy share, a fraction"
 
 # spike_ratio must equal volume_window / volume_average (rounding tolerance).
 expected = round(row["volume_window"] / row["volume_average"], 2)

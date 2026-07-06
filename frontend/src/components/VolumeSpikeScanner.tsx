@@ -38,6 +38,15 @@ function spikeCls(r: number): string {
   return 'text-slate-400 bg-slate-500/10 border-slate-500/20'
 }
 
+// Buy/sell classification of the spike candle from its taker-buy share.
+// >55% aggressive buyers, <45% aggressive sellers, else a balanced tug-of-war.
+function flowBadge(buyRatio: number): { text: string; cls: string } {
+  const pct = Math.round(buyRatio * 100)
+  if (buyRatio >= 0.55) return { text: `▲ Buy ${pct}%`, cls: 'text-green-400 bg-green-500/10 border-green-500/30' }
+  if (buyRatio <= 0.45) return { text: `▼ Sell ${100 - pct}%`, cls: 'text-red-400 bg-red-500/10 border-red-500/30' }
+  return { text: `~ Mixed ${pct}%`, cls: 'text-slate-400 bg-slate-500/10 border-slate-500/20' }
+}
+
 export default function VolumeSpikeScanner({ symbols, onSelect }: {
   symbols: string[]; onSelect?: (symbol: string) => void
 }) {
@@ -132,6 +141,7 @@ export default function VolumeSpikeScanner({ symbols, onSelect }: {
           <p><span className="text-slate-300">Vol (window)</span> — the last closed candle's traded volume: how much got pushed right now.</p>
           <p><span className="text-slate-300">Avg Vol</span> — mean volume over the previous {window} candles (the "normal" for this coin/timeframe).</p>
           <p><span className="text-slate-300">Spike×</span> — Vol ÷ Avg Vol. Above 2× means a real surge; 3×+ is a hard spike.</p>
+          <p><span className="text-slate-300">Flow</span> — was this candle's volume aggressive <span className="text-green-400">buying</span> or <span className="text-red-400">selling</span>? From taker-buy share: ▲ Buy ≥55%, ▼ Sell ≤45%, ~ Mixed in between. This is who was hitting the market (impatient market orders), i.e. who drove the spike.</p>
           <p><span className="text-slate-300">Orders</span> — number of trades that printed on that candle (how many orders were placed).</p>
           <p><span className="text-slate-300">Max Push</span> — the single biggest candle's volume in the window (largest order push), as a × of the average.</p>
           <p className="text-slate-600">Uses the last <em>closed</em> candle — the live candle's volume is partial and would hide real spikes. The market scan is heavy (300 calls) so it runs on demand, not on a timer.</p>
@@ -152,6 +162,7 @@ export default function VolumeSpikeScanner({ symbols, onSelect }: {
                 <th className="py-2 pr-3 font-medium text-right">Vol (window)</th>
                 <th className="py-2 pr-3 font-medium text-right">Avg Vol</th>
                 <th className="py-2 pr-3 font-medium text-right">Spike×</th>
+                <th className="py-2 pr-3 font-medium text-center">Flow</th>
                 <th className="py-2 pr-3 font-medium text-right">Orders</th>
                 <th className="py-2 pr-3 font-medium text-right">Max Push</th>
                 {isMarket && <th className="py-2 font-medium text-right">Score</th>}
@@ -166,7 +177,7 @@ export default function VolumeSpikeScanner({ symbols, onSelect }: {
                     <>
                       <td className="py-2 pr-3 text-slate-600 tabular-nums">—</td>
                       <td className="py-2 pr-3 font-medium text-slate-400">{r.symbol.replace('USDT', '')}</td>
-                      <td className="py-2 pr-3 text-red-400/70" colSpan={isMarket ? 8 : 7}>✕ {r.error}</td>
+                      <td className="py-2 pr-3 text-red-400/70" colSpan={isMarket ? 9 : 8}>✕ {r.error}</td>
                     </>
                   ) : (
                     <>
@@ -179,6 +190,12 @@ export default function VolumeSpikeScanner({ symbols, onSelect }: {
                       <td className="py-2 pr-3 text-right">
                         <span className={`inline-block px-2 py-0.5 rounded-md border font-semibold tabular-nums ${spikeCls(r.spike_ratio)}`}>
                           {r.spike_ratio.toFixed(2)}×
+                        </span>
+                      </td>
+                      <td className="py-2 pr-3 text-center">
+                        <span className={`inline-block px-2 py-0.5 rounded-md border font-medium tabular-nums ${flowBadge(r.buy_ratio).cls}`}
+                          title={`${Math.round(r.buy_ratio * 100)}% of this candle's volume was aggressive buying`}>
+                          {flowBadge(r.buy_ratio).text}
                         </span>
                       </td>
                       <td className="py-2 pr-3 text-right text-slate-300 tabular-nums">{fmtNum(r.orders)}</td>
@@ -196,7 +213,7 @@ export default function VolumeSpikeScanner({ symbols, onSelect }: {
                 </tr>
               ))}
               {rows.length === 0 && !loading && (
-                <tr><td colSpan={isMarket ? 10 : 9} className="py-4 text-center text-slate-600">
+                <tr><td colSpan={isMarket ? 11 : 10} className="py-4 text-center text-slate-600">
                   {isMarket ? 'Click “Scan market” to rank the top 300 coins.' : 'No data.'}
                 </td></tr>
               )}

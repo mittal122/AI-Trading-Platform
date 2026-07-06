@@ -1834,11 +1834,14 @@ happening so they can plan trades off one panel. Two-mode card on the Dashboard:
   refresh 20s. **Whole-market mode** — scans the top-300 most-liquid USDT pairs
   and ranks by a **blended surge × liquidity** score (on demand, ~2s).
 - Columns: Time · Symbol · LTP · TF · Vol (window) · Avg Vol · **Spike×** ·
-  **Orders** · **Max Push** (+ **Score** in market mode). "Orders" = kline field
-  8 `number_of_trades` (the taker-flow field the standard OHLCV path drops) =
-  how many orders printed on the candle. "Max Push" = biggest single-candle
-  volume in the window. Reads the last **closed** candle (live candle's partial
-  volume would mask spikes).
+  **Flow** · **Orders** · **Max Push** (+ **Score** in market mode). "Orders" =
+  kline field 8 `number_of_trades` (the taker-flow field the standard OHLCV path
+  drops) = how many orders printed on the candle. "Max Push" = biggest
+  single-candle volume in the window. **"Flow"** = buyer/seller classification
+  of the spike candle from `buy_ratio` = kline field 9 `taker_buy_base` / volume
+  (aggressive market buys ÷ total): ▲ Buy ≥55%, ▼ Sell ≤45%, ~ Mixed between —
+  answers "is this spike buying or selling volume." Reads the last **closed**
+  candle (live candle's partial volume would mask spikes).
 - Backend: `BinanceProvider.get_volume_scan()` (single-symbol, raw klines) +
   `MarketService` passthrough; `backend/app/services/market_scanner.py`
   `VolumeScanner.scan_market()` owns the fan-out + ranking (ThreadPoolExecutor

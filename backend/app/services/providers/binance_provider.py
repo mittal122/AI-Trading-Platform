@@ -166,11 +166,17 @@ class BinanceProvider(BaseMarketProvider):
         def _orders(k):
             return int(k[8])
 
+        def _taker_buy(k):
+            return float(k[9])  # taker-buy base volume — aggressive market buys
+
         cur_vol = _vol(current)
         n = len(window_candles)
         avg_vol = sum(_vol(k) for k in window_candles) / n if n else 0.0
         avg_orders = sum(_orders(k) for k in window_candles) / n if n else 0.0
         max_push = max((_vol(k) for k in window_candles), default=0.0)
+        # Buy share on the spiking candle: taker-buy / total. >0.5 = aggressive
+        # buyers drove it, <0.5 = aggressive sellers. 0.5 when the candle is empty.
+        cur_buy_ratio = _taker_buy(current) / cur_vol if cur_vol > 0 else 0.5
 
         return {
             "symbol": symbol.upper(),
@@ -184,6 +190,7 @@ class BinanceProvider(BaseMarketProvider):
             "avg_orders": round(avg_orders, 1),
             "max_push_volume": round(max_push, 4),
             "max_push_ratio": round(max_push / avg_vol, 2) if avg_vol > 0 else 0.0,
+            "buy_ratio": round(cur_buy_ratio, 4),
         }
 
     def get_funding(self, symbol: str) -> Optional[dict]:
