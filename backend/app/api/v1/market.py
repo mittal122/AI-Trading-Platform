@@ -24,6 +24,7 @@ from backend.app.schemas.market_overview import (
 )
 
 from backend.app.services.market_service import MarketService
+from backend.app.services.market_scanner import VolumeScanner
 
 # Breadth/movers ignore pairs below this 24h quote volume — thousands of
 # near-dead micro-caps would otherwise dominate the statistics.
@@ -43,6 +44,7 @@ router = APIRouter(
 )
 
 market_service = MarketService()
+volume_scanner = VolumeScanner()
 
 
 @router.get(
@@ -275,6 +277,24 @@ def volume_scan(
 
     rows.sort(key=lambda r: r.spike_ratio, reverse=True)
     return VolumeScanResponse(interval=interval, window=window, rows=rows)
+
+
+@router.get(
+    "/volume-scan/market",
+    response_model=VolumeScanResponse,
+)
+def volume_scan_market(
+    interval: str = Query(default="5m"),
+    window: int = Query(default=20, ge=5, le=200),
+    top: int = Query(default=300, ge=10, le=400),
+    limit: int = Query(default=40, ge=1, le=100),
+):
+    """Whole-market order-push scan: read the top `top` liquid USDT pairs, rank
+    by blended surge x size, return the `limit` hottest. Heavier than the
+    watchlist scan (one Binance klines call per coin, run concurrently) — meant
+    to be triggered on demand, not polled every few seconds."""
+    return VolumeScanResponse(**volume_scanner.scan_market(
+        interval=interval, window=window, top=top, limit=limit))
 
 
 @router.get(

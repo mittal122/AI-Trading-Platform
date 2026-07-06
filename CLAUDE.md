@@ -1825,6 +1825,39 @@ and lives in `backend/app/core/smc_config.py` — no magic numbers in the engine
   rectangle/eraser) — heavy, low value since the SMC chart auto-draws its zones;
   and the Alembic migration for the scanner tables (dev works via create_tables).
 
+### Volume Spike Scanner — Market Dashboard (2026-07-06)
+
+User wanted a single scanner that surfaces where the biggest order push is
+happening so they can plan trades off one panel. Two-mode card on the Dashboard:
+
+- **Watchlist mode** — one row per watchlist coin on a chosen timeframe, auto-
+  refresh 20s. **Whole-market mode** — scans the top-300 most-liquid USDT pairs
+  and ranks by a **blended surge × liquidity** score (on demand, ~2s).
+- Columns: Time · Symbol · LTP · TF · Vol (window) · Avg Vol · **Spike×** ·
+  **Orders** · **Max Push** (+ **Score** in market mode). "Orders" = kline field
+  8 `number_of_trades` (the taker-flow field the standard OHLCV path drops) =
+  how many orders printed on the candle. "Max Push" = biggest single-candle
+  volume in the window. Reads the last **closed** candle (live candle's partial
+  volume would mask spikes).
+- Backend: `BinanceProvider.get_volume_scan()` (single-symbol, raw klines) +
+  `MarketService` passthrough; `backend/app/services/market_scanner.py`
+  `VolumeScanner.scan_market()` owns the fan-out + ranking (ThreadPoolExecutor
+  over the liquid universe — provider stays single-symbol, same split as
+  SignalScanner/PatternScanner). Blended score = `spike_ratio × size_factor`,
+  size_factor ∈ [0.5,1.0] scaled by `log(quote_volume_24h)` so a real surge on a
+  mid-cap outranks a flat mega-cap but a micro-cap can't top the board. Universe
+  = top-N USDT pairs above $1M 24h volume (hard liquidity gate — same floor as
+  market overview; ~169 pairs clear it today, `top=300` just caps).
+- Endpoints: `GET /market/volume-scan` (watchlist, symbols csv) +
+  `GET /market/volume-scan/market` (top/limit). Schemas: `VolumeScanRow`/
+  `VolumeScanResponse` in `schemas/market_overview.py`. Per-symbol errors
+  isolated (watchlist → error row; market → dropped, no error rows on a ranked
+  board). Frontend: `components/VolumeSpikeScanner.tsx` on `Dashboard.tsx`.
+- Verified: `tests/test_volume_scan.py` (live Binance — spike math, order ints,
+  max-push, blended-desc ranking, liquidity gate); live curl both endpoints
+  (top-300 ~1.9s); headless Chrome both modes (RIF 30.7×→score 17.59 top),
+  0 console errors, `tsc --noEmit` clean.
+
 ---
 
 ## Immediate Next Task

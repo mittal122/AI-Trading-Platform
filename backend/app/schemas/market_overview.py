@@ -77,6 +77,8 @@ class VolumeScanRow(BaseModel):
     avg_orders: float                 # mean trade count over the window
     max_push_volume: float            # biggest single-candle volume in the window
     max_push_ratio: float             # max_push_volume / volume_average
+    quote_volume_24h: Optional[float] = None   # 24h $ volume (market scan only — liquidity)
+    blended_score: Optional[float] = None      # spike x size rank (market scan only)
     error: Optional[str] = None       # set instead of the numbers if the scan failed
 
 
@@ -84,3 +86,4 @@ class VolumeScanResponse(BaseModel):
     interval: str
     window: int
     rows: list[VolumeScanRow]
+    scanned: Optional[int] = None     # how many symbols the market scan actually covered

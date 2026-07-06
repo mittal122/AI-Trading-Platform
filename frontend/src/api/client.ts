@@ -77,7 +77,7 @@ export interface VolumeScanRow {
   error: string | null
 }
 export interface VolumeScanResponse {
-  interval: string; window: number; rows: VolumeScanRow[]
+  interval: string; window: number; rows: VolumeScanRow[]; scanned?: number
 }
 
 export const getMarketOverview = () => api.get<MarketOverview>('/market/overview')
@@ -92,6 +92,10 @@ export const getFunding = (symbol: string) =>
 export const getVolumeScan = (symbols: string[], interval = '5m', window = 20) =>
   api.get<VolumeScanResponse>('/market/volume-scan', {
     params: { symbols: symbols.join(','), interval, window },
+  })
+export const getVolumeScanMarket = (interval = '5m', window = 20, top = 300, limit = 40) =>
+  api.get<VolumeScanResponse>('/market/volume-scan/market', {
+    params: { interval, window, top, limit },
   })
 
 export interface Indicators {

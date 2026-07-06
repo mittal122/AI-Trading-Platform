@@ -47,4 +47,26 @@ except Exception as exc:
     print(f"PASS: bad symbol raised as expected ({type(exc).__name__}) — router turns this into an error row")
 assert raised, "unknown symbol should raise at the provider layer"
 
+print("\n========== MARKET-WIDE SCAN (blended surge x size) ==========\n")
+from backend.app.services.market_scanner import VolumeScanner
+
+scanner = VolumeScanner()
+result = scanner.scan_market(interval="5m", window=20, top=60, limit=15)
+assert result["scanned"] > 0, "scan should cover at least some coins"
+assert len(result["rows"]) <= 15
+rows = result["rows"]
+assert len(rows) > 0, "expected ranked rows"
+
+# Every ranked row carries a blended score + 24h volume, and is sorted desc.
+scores = [r["blended_score"] for r in rows]
+assert all(s is not None for s in scores)
+assert scores == sorted(scores, reverse=True), "rows must be ranked by blended score desc"
+assert all(r.get("quote_volume_24h", 0) >= 1_000_000 for r in rows), "liquidity gate must hold"
+assert all(r["orders"] >= 0 for r in rows)
+top_row = rows[0]
+print(f"PASS: scanned {result['scanned']} coins; top = {top_row['symbol']} "
+      f"spike={top_row['spike_ratio']}x orders={top_row['orders']} "
+      f"score={top_row['blended_score']} (24h vol ${top_row['quote_volume_24h']:,.0f})")
+print("     top 5:", ", ".join(f"{r['symbol']}({r['blended_score']})" for r in rows[:5]))
+
 print("\n========== RESULTS: all checks passed ==========")
