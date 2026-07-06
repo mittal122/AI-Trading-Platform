@@ -13,8 +13,8 @@ reachable over the public internet without port-forwarding or a domain.
 |---|---|
 | Connectivity home→internet | **Tailscale Funnel** — stable public `https://<host>.<tailnet>.ts.net`, no domain, no port-forward, hides home IP, supports WSS |
 | Security posture | **Site-wide password gate** — one shared token protects the entire app (frontend login + backend rejects every request without it) |
-| Backend orchestration | **k3s** (lightweight single-node Kubernetes), systemd-managed → auto-start on reboot, auto-restart on crash |
-| Kronos compute | **CPU only** (host has no dedicated GPU) |
+| Backend orchestration | **k3s** (lightweight single-node Kubernetes), systemd-managed → auto-start on reboot, auto-restart on crash. Chosen over full kubeadm k8s because the target host is an old i3 / 8GB box — full k8s control-plane (~2GB) would starve Kronos/Postgres; k3s overhead is ~0.5GB. Manifests are standard k8s, portable to full k8s later unchanged. |
+| Kronos compute | **CPU only** (host has no dedicated GPU), **lazy-loaded** (see §8) to keep boot RAM low on the 8GB box |
 | Database | **PostgreSQL** as a k8s StatefulSet with a PersistentVolume |
 | Frontend host | **Vercel** |
 
@@ -152,6 +152,21 @@ Key points:
 - Env var in Vercel project: `VITE_API_BASE_URL=https://<host>.<tailnet>.ts.net/api/v1`.
 - Note: the funnel URL must exist BEFORE the first Vercel build (build-time env).
 
+### 8. Lazy-load Kronos (CHANGE — memory on the 8GB box)
+
+The predict path **already** lazy-loads: `prediction_service.py` does
+`if not kronos.is_loaded(): kronos.load()` before predicting. The ONLY eager
+load is `backend/app/main.py:44` `kronos.load()` in the lifespan startup.
+
+- Remove/guard that one line so the model loads on the **first `/predict` call**
+  instead of at boot. Until then the box runs without PyTorch's model in RAM
+  (~2–4GB freed at idle), which matters on 8GB.
+- Optional env flag `KRONOS_EAGER_LOAD` (default false) to restore eager loading
+  if ever wanted — keeps the behavior configurable, no hard removal.
+- Trade-off (documented): the first `/predict` request after boot is slow (model
+  loads then). Acceptable — prediction is not on the hot path for dashboards.
+- No other change needed; `is_loaded()`/`load()`/`predict()` already exist.
+
 ### 7. Deploy guide (NEW — `docs/DEPLOY.md`)
 
 Exact ordered commands, two halves:
@@ -235,7 +250,7 @@ Exact ordered commands, two halves:
 - `tests/test_site_gate.py`
 
 **Changed**
-- `backend/app/main.py` (register SiteAccessMiddleware)
+- `backend/app/main.py` (register SiteAccessMiddleware; lazy-load Kronos — guard the eager `kronos.load()` behind `KRONOS_EAGER_LOAD`)
 - `frontend/src/api/client.ts` (VITE_API_BASE_URL base + site-token interceptor)
 - `frontend/src/pages/PaperTrade.tsx` (WS host + `?site_token=`)
 - `frontend/src/App.tsx` (mount SiteGate before the app)
