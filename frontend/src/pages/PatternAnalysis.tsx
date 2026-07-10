@@ -468,7 +468,13 @@ export default function PatternAnalysis() {
       try {
         const res = await getLiveMarket(symbolRef.current, intervalRef.current)
         const live = res.data
-        candleSeriesRef.current.update(toBar(live))
+        const bar = toBar(live)
+        // A single bar with a NaN time (bad/missing timestamp in a glitched
+        // response) permanently poisons the series: update() accepts it, then
+        // every repaint throws "Value is null" until the page dies. Validate
+        // before it can enter the chart.
+        if (!Number.isFinite(bar.time) || !Number.isFinite(bar.close)) return
+        candleSeriesRef.current.update(bar)
 
         const candles = allCandlesRef.current
         const lastIdx = candles.length - 1

@@ -8,7 +8,7 @@ import type {
 } from 'lightweight-charts'
 import { RectanglesPrimitive } from '../lib/rectanglePrimitive'
 import type { RectangleSpec } from '../lib/rectanglePrimitive'
-import { getSmcAnalysis } from '../api/client'
+import { getSmcAnalysis, getLiveMarket } from '../api/client'
 import type { SmcAnalysis } from '../api/client'
 import SymbolSearchInput from '../components/SymbolSearchInput'
 import { usePersistedState } from '../hooks/usePersistedState'
@@ -35,6 +35,9 @@ const DEFAULT_LAYERS: Record<LayerKey, boolean> = {
 }
 
 const toSec = (iso: string) => Math.floor(Date.parse(iso) / 1000) as UTCTimestamp
+
+// How often the chart's last (still-forming) candle is refreshed from Binance.
+const LIVE_POLL_MS = 5000
 
 // Zone colouring: POIs (the double-confluence signature zone) in gold, everything
 // else by directional bias.
@@ -85,20 +88,58 @@ export default function SmcAnalyzer() {
     setAllTrendlines(m => ({ ...m, [tlKey]: [...(m[tlKey] ?? []), tl] }))
   const clearTrendlines = () => setAllTrendlines(m => ({ ...m, [tlKey]: [] }))
 
-  const run = useCallback(async () => {
-    setLoading(true); setError(null)
+  // quiet=true refreshes the analysis without the loading state — used by the
+  // live poll when a candle closes, so the page doesn't flash every refresh.
+  const run = useCallback(async (quiet?: unknown) => {
+    const isQuiet = quiet === true
+    if (!isQuiet) setLoading(true)
+    setError(null)
     try {
       const { data } = await getSmcAnalysis(symbol, interval, 500)
       setAnalysis(data)
     } catch (e: any) {
-      setError(e?.response?.data?.detail ?? 'Analysis failed. Is the backend running?')
-      setAnalysis(null)
+      if (!isQuiet) {
+        setError(e?.response?.data?.detail ?? 'Analysis failed. Is the backend running?')
+        setAnalysis(null)
+      }
     } finally {
-      setLoading(false)
+      if (!isQuiet) setLoading(false)
     }
   }, [symbol, interval])
 
   useEffect(() => { run() }, [run])
+
+  // Live updates: the analysis itself is frozen by design (see SmcFreezeBar),
+  // but the chart's last candle must track the real market — and once a new
+  // candle closes, the frozen analysis is re-run quietly so zones/structure/
+  // trade plans reflect real data instead of going stale forever.
+  const runRef = useRef(run); runRef.current = run
+  const chartSymbolRef = useRef<string | null>(null)
+  const chartIntervalRef = useRef<string | null>(null)
+  const lastCandleTimeRef = useRef<number | null>(null)
+  const refreshingRef = useRef(false)
+  useEffect(() => {
+    const id = window.setInterval(async () => {
+      const series = candleSeriesRef.current
+      const sym = chartSymbolRef.current, itv = chartIntervalRef.current
+      const last = lastCandleTimeRef.current
+      if (!series || !sym || !itv || last === null) return
+      try {
+        const { data: live } = await getLiveMarket(sym, itv)
+        const t = toSec(live.timestamp)
+        // A NaN-time or stale bar must never reach update() — one bad bar
+        // permanently breaks the series' rendering ("Value is null" on every
+        // repaint until remount).
+        if (!Number.isFinite(t) || !Number.isFinite(live.close) || t < last) return
+        series.update({ time: t, open: live.open, high: live.high, low: live.low, close: live.close })
+        if (t > last && !refreshingRef.current) {
+          refreshingRef.current = true
+          try { await runRef.current(true) } finally { refreshingRef.current = false }
+        }
+      } catch { /* transient network hiccup — next tick retries */ }
+    }, LIVE_POLL_MS)
+    return () => window.clearInterval(id)
+  }, [])
 
   // Create the chart once.
   useEffect(() => {
@@ -170,6 +211,11 @@ export default function SmcAnalyzer() {
 
     const lastTime = toSec(candles[candles.length - 1].time)
     const backstopTime = toSec(candles[Math.max(0, candles.length - 40)].time)
+
+    // Tell the live poll what's actually on the chart now.
+    chartSymbolRef.current = analysis.symbol
+    chartIntervalRef.current = analysis.interval
+    lastCandleTimeRef.current = lastTime
 
     // ── Zones (order blocks / FVGs / POIs / demand-supply) ──
     const rects: RectangleSpec[] = layers.zones

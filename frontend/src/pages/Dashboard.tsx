@@ -232,7 +232,11 @@ export default function Dashboard() {
       try {
         const res = await getLiveMarket(symbol, INTERVAL)
         const live = res.data
-        candleSeries.update(toBar(live))
+        const bar = toBar(live)
+        // NaN-time bar from a glitched response would poison the series
+        // (every later repaint throws "Value is null") — validate first.
+        if (!Number.isFinite(bar.time) || !Number.isFinite(bar.close)) return
+        candleSeries.update(bar)
         const lastIdx = allCandles.length - 1
         if (allCandles[lastIdx].timestamp === live.timestamp) {
           allCandles[lastIdx] = live
