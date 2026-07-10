@@ -1,0 +1,4 @@
+# Launcher scripts must keep their native line endings on every platform:
+# cmd.exe misparses LF-only .bat files; bash chokes on CRLF .sh files.
+*.bat text eol=crlf
+*.sh  text eol=lf
