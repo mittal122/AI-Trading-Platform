@@ -39,3 +39,6 @@ node_modules/
 
 # session verification screenshots (repo root)
 /*.png
+
+# Local Kronos model repo clone (auto-downloaded by run.bat)
+Kronos/
