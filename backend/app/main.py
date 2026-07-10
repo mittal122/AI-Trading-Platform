@@ -45,6 +45,18 @@ async def lifespan(app: FastAPI):
     await create_tables()
     print("Database tables ready")
 
+    # Use Settings-page Binance credentials for all market-data fetching.
+    try:
+        from backend.app.services.db_service import DatabaseService
+        from backend.app.services.providers.binance_provider import configure_credentials
+
+        creds = await DatabaseService().get_exchange_credentials()
+        if creds:
+            configure_credentials(*creds)
+            print("Binance client using stored Settings-page credentials")
+    except Exception as exc:  # missing JWT_SECRET etc. must not block boot
+        print(f"Could not load stored Binance credentials: {exc}")
+
     scanner_task = asyncio.create_task(_smc_scanner_loop())
     print("SMC signal scanner started (60s)")
 

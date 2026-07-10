@@ -1,3 +1,4 @@
+import os
 import time
 from typing import Optional
 
@@ -7,6 +8,30 @@ from binance.client import Client
 from backend.app.services.providers.base_provider import (
     BaseMarketProvider,
 )
+
+# One shared REST client for every BinanceProvider instance — so credentials
+# saved from the Settings page take effect app-wide immediately, including in
+# long-lived services (scanners, engines) that hold a MarketService.
+# Precedence: Settings-page keys > BINANCE_API_KEY/BINANCE_SECRET env > keyless.
+_shared_client: Client | None = None
+
+
+def configure_credentials(api_key: str | None = None, api_secret: str | None = None) -> None:
+    """(Re)build the shared client. Called at startup with DB credentials and
+    again whenever keys are saved/deleted on the Settings page. Public market
+    endpoints ignore the key header (verified live), so a wrong key can never
+    break data fetching — it only matters for authenticated calls."""
+    global _shared_client
+    if not (api_key and api_secret):
+        api_key = os.getenv("BINANCE_API_KEY") or None
+        api_secret = os.getenv("BINANCE_SECRET") or None
+    _shared_client = Client(api_key, api_secret)
+
+
+def _get_shared_client() -> Client:
+    if _shared_client is None:
+        configure_credentials()
+    return _shared_client
 
 # One 24h-ticker snapshot covers every symbol on the exchange (~3,600 rows)
 # and feeds the whole market-overview dashboard — cache it briefly so a
@@ -29,8 +54,13 @@ class BinanceProvider(BaseMarketProvider):
     }
 
     def __init__(self):
-        self.client = Client()
         self._ticker_cache: tuple[float, list[dict]] | None = None
+
+    @property
+    def client(self) -> Client:
+        # Always read the shared client so a credential change (Settings page)
+        # reaches every existing provider instance, not just new ones.
+        return _get_shared_client()
 
     def get_provider_name(self):
         return "binance"

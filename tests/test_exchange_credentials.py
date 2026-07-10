@@ -61,7 +61,26 @@ def test_repository_crud():
     asyncio.run(_run_repo_checks())
 
 
+def test_provider_uses_configured_credentials():
+    """Settings-page keys must reach every provider instance, old and new."""
+    from backend.app.services.providers import binance_provider
+    from backend.app.services.providers.binance_provider import BinanceProvider, configure_credentials
+
+    provider = BinanceProvider()  # created BEFORE keys are saved
+    configure_credentials("user-key", "user-secret")
+    assert provider.client.API_KEY == "user-key", "existing instance must pick up new keys"
+    assert BinanceProvider().client.API_KEY == "user-key"
+
+    configure_credentials()  # delete path — env fallback or keyless
+    import os
+    expected = os.getenv("BINANCE_API_KEY") or None
+    assert provider.client.API_KEY == expected
+    binance_provider._shared_client = None  # don't leak test keys into other tests
+    print("PASS: configure_credentials reaches shared client")
+
+
 if __name__ == "__main__":
     test_encrypt_decrypt_roundtrip()
     test_repository_crud()
+    test_provider_uses_configured_credentials()
     print("\nRESULTS: all checks passed")
