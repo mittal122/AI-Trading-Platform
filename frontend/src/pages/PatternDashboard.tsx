@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { RefreshCw } from 'lucide-react'
 import { getPatternDashboard } from '../api/client'
 import type { PatternDashboardRow } from '../api/client'
+import LoadingOverlay from '../components/LoadingOverlay'
 import SymbolSearchInput from '../components/SymbolSearchInput'
 import { usePersistedState } from '../hooks/usePersistedState'
 
@@ -48,7 +49,8 @@ export default function PatternDashboard() {
   const bearish = confirmedRows.filter(r => r.direction === 'BEARISH').sort((a, b) => intervalRank(a.interval) - intervalRank(b.interval))
 
   return (
-    <div className="p-3 space-y-3 max-w-[1800px] mx-auto">
+    <div className="relative p-3 space-y-3 max-w-[1800px] mx-auto">
+      <LoadingOverlay show={loading} label="Scanning every timeframe — this can take a minute…" />
       {/* Toolbar */}
       <div className="card flex items-center gap-3 px-3 py-2 flex-wrap">
         <span className="panel-title">Pattern Dashboard</span>
@@ -93,7 +95,10 @@ function PatternSection({ title, chipCls, rows, navigate }: {
   navigate: ReturnType<typeof useNavigate>
 }) {
   return (
-    <section className="card">
+    // min-w-0: without it a grid child refuses to shrink below its nowrap
+    // table content, forcing the whole page wider than the viewport (the
+    // toolbar's scan button then gets clipped off-screen).
+    <section className="card min-w-0">
       <header className="flex items-center justify-between px-3 pt-3 pb-2">
         <h2 className="panel-title">{title}</h2>
         <span className={`chip ${chipCls} num`}>{rows.length}</span>
@@ -101,7 +106,7 @@ function PatternSection({ title, chipCls, rows, navigate }: {
       {rows.length === 0 ? (
         <p className="text-fg-faint text-xs text-center py-6">No confirmed signals.</p>
       ) : (
-        <div className="pb-1.5">
+        <div className="pb-1.5 overflow-x-auto">
           <table className="w-full text-[12.5px]">
             <thead>
               <tr>
