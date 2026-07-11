@@ -8,6 +8,7 @@ import PaperTrade from './pages/PaperTrade'
 import PatternAnalysis  from './pages/PatternAnalysis'
 import PatternDashboard from './pages/PatternDashboard'
 import SmcAnalyzer from './pages/SmcAnalyzer'
+import SmcAutoTest from './pages/SmcAutoTest'
 import Settings   from './pages/Settings'
 
 export default function App() {
@@ -26,6 +27,7 @@ export default function App() {
               <Route path="/patterns"           element={<PatternAnalysis />} />
               <Route path="/patterns/dashboard" element={<PatternDashboard />} />
               <Route path="/smc"       element={<SmcAnalyzer />} />
+              <Route path="/smc/autotest" element={<SmcAutoTest />} />
               <Route path="/settings"  element={<Settings />} />
             </Routes>
           </main>

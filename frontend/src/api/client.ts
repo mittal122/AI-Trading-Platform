@@ -479,6 +479,26 @@ export interface SmcAnalysis {
   annotations?: ChartAnnotations
 }
 
+// ── SMC Auto-Test — hands-free paper-trading loop ──
+export interface AutoTestEvent {
+  time: string; action: string; detail: string
+  long_score?: number | null; short_score?: number | null
+}
+export interface AutoTestStatus {
+  running: boolean; symbol: string; interval: string
+  risk_percent: number; min_score: number; flip_margin: number
+  started_at: string | null
+  current_side: string | null; current_order: ManualOrder | null
+  last_analysis: { candle_time: string; primary: string; long_score: number; short_score: number } | null
+  events: AutoTestEvent[]
+  stats: { trades: number; wins: number; net_pnl: number }
+}
+export const startAutoTest = (body: {
+  symbol: string; interval: string; risk_percent: number; min_score: number; flip_margin: number
+}) => api.post<AutoTestStatus>('/smc/autotest/start', body)
+export const stopAutoTest = () => api.post<AutoTestStatus>('/smc/autotest/stop')
+export const getAutoTestStatus = () => api.get<AutoTestStatus>('/smc/autotest/status')
+
 export const getSmcAnalysis = (symbol: string, interval: string, limit = 500) =>
   api.get<SmcAnalysis>(`/smc/analyze/${symbol}/${interval}`, { params: { limit } })
 

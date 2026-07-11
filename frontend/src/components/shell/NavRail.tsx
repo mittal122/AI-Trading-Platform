@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import {
-  CandlestickChart, ScanSearch, LayoutGrid, Layers,
+  CandlestickChart, ScanSearch, LayoutGrid, Layers, Repeat2,
   FlaskConical, NotebookPen, PieChart, Settings,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -9,7 +9,8 @@ const LINKS: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = 
   { to: '/',                  label: 'Terminal',  icon: CandlestickChart, end: true },
   { to: '/patterns',          label: 'Analysis',  icon: ScanSearch },
   { to: '/patterns/dashboard', label: 'Patterns', icon: LayoutGrid },
-  { to: '/smc',               label: 'SMC',       icon: Layers },
+  { to: '/smc',               label: 'SMC',       icon: Layers, end: true },
+  { to: '/smc/autotest',      label: 'Auto-Test', icon: Repeat2 },
   { to: '/backtest',          label: 'Backtest',  icon: FlaskConical },
   { to: '/paper',             label: 'Paper',     icon: NotebookPen },
   { to: '/portfolio',         label: 'Portfolio', icon: PieChart },

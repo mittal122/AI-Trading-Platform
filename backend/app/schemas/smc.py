@@ -314,6 +314,15 @@ class AnalysisRequest(BaseModel):
     limit: int = 500
 
 
+class AutoTestStartRequest(BaseModel):
+    """Start the SMC auto-test loop (paper trades only)."""
+    symbol: str
+    interval: str = "5m"
+    risk_percent: float = 1.0
+    min_score: int = 40
+    flip_margin: int = 10
+
+
 # --------------------------------------------------------------------------- #
 # Backtest (§9)
 # --------------------------------------------------------------------------- #

@@ -174,5 +174,14 @@ class SmcConfig:
     SCAN_MAX_PER_WEEK_MAX = 4
     SCAN_DEDUP_HOURS = 24          # no dup signal (same symbol+tf+side) within
 
+    # ===== Auto-test loop (re-analyze every candle close, paper-trade the
+    # stronger side, flip on reversal) =====
+    AUTOTEST_POLL_SECONDS = 15       # how often the loop checks for a new closed candle
+    AUTOTEST_FETCH_CANDLES = 500     # analysis window (== live analysis)
+    AUTOTEST_MIN_SCORE_DEFAULT = 40  # don't enter unless the side scores at least this
+    AUTOTEST_FLIP_MARGIN_DEFAULT = 10  # opposite side must beat current by this to flip
+    AUTOTEST_RISK_PCT_DEFAULT = 1.0
+    AUTOTEST_LOG_MAX = 200           # in-memory event log cap
+
 
 smc_config = SmcConfig()

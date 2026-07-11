@@ -84,6 +84,17 @@ class ManualPaperTrader:
               f"@ {order.entry} SL={order.stop_loss} TP={order.take_profit}")
         return order
 
+    async def close_now(self, order_id: int, reason: str = "FLIPPED") -> ManualOrder:
+        """Close an OPEN order immediately at the latest market price —
+        used by the SMC auto-tester's direction flips. The monitor task
+        notices status != OPEN on its next poll and exits by itself."""
+        order = self._open.get(order_id)
+        if order is None:
+            raise ValueError(f"No open order #{order_id}")
+        price = await self._latest_price(order.symbol, "1m")
+        await self._close(order, price, reason)
+        return order
+
     def status(self) -> ManualPaperStatus:
         # This trader settles PnL on close (balance is never debited when a
         # position opens), so equity = balance + open unrealized PnL. The
@@ -160,6 +171,11 @@ class ManualPaperTrader:
             pass
 
     async def _close(self, order: ManualOrder, price: float, reason: str) -> None:
+        # Idempotence guard — close_now() and the monitor task can race
+        # (e.g. a flip lands the same moment SL/TP is hit); PnL must never
+        # be booked twice for one order.
+        if order.status != "OPEN":
+            return
         pnl = self._pnl(order, price)
         self.balance += pnl
         self.realized_pnl += pnl
