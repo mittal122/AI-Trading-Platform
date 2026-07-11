@@ -121,7 +121,9 @@ export interface PortfolioAnalytics {
   initial_balance: number; ending_balance: number; total_return: number
   total_trades: number; winning_trades: number; losing_trades: number
   win_rate: number; avg_win: number; avg_loss: number
-  profit_factor: number; expectancy: number
+  // Backend computes float('inf') when there are no losing trades; JSON
+  // cannot carry Infinity, so it arrives as null.
+  profit_factor: number | null; expectancy: number
   sharpe_ratio: number; sortino_ratio: number; calmar_ratio: number
   max_drawdown: number
 }
@@ -143,7 +145,7 @@ export interface BacktestRunItem {
   id: number; strategy: string; symbol: string; interval: string
   limit: number; initial_balance: number; final_balance: number
   total_return: number; total_trades: number; win_rate: number
-  profit_factor: number; sharpe_ratio: number; max_drawdown: number
+  profit_factor: number | null; sharpe_ratio: number; max_drawdown: number
   winning_trades: number; losing_trades: number; avg_win: number
   avg_loss: number; expectancy: number; sortino_ratio: number
   calmar_ratio: number; created_at: string

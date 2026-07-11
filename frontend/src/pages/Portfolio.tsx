@@ -56,8 +56,8 @@ export default function Portfolio() {
           <Stat label="Win Rate" value={`${analytics.win_rate.toFixed(1)}%`}
             sub={`${analytics.winning_trades}W / ${analytics.losing_trades}L`} />
           <Stat label="Profit Factor"
-            value={analytics.profit_factor === Infinity ? 'inf' : analytics.profit_factor.toFixed(2)}
-            valueCls={analytics.profit_factor >= 1 ? 'text-up' : 'text-down'} />
+            value={analytics.profit_factor == null ? 'inf' : analytics.profit_factor.toFixed(2)}
+            valueCls={analytics.profit_factor == null || analytics.profit_factor >= 1 ? 'text-up' : 'text-down'} />
           <Stat label="Max Drawdown" value={`${analytics.max_drawdown.toFixed(2)}%`}
             valueCls={analytics.max_drawdown > 0 ? 'text-down' : undefined} />
           <Stat label="Sharpe Ratio" value={analytics.sharpe_ratio.toFixed(3)}

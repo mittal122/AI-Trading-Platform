@@ -16,7 +16,8 @@ export default function PortfolioSummary({ data }: { data: PortfolioAnalytics })
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Metric label="Total Return" value={`${data.total_return >= 0 ? '+' : ''}${data.total_return.toFixed(2)}%`} sub={`$${data.initial_balance.toLocaleString()} → $${data.ending_balance.toLocaleString()}`} />
         <Metric label="Win Rate" value={`${data.win_rate.toFixed(1)}%`} sub={`${data.winning_trades}W / ${data.losing_trades}L`} />
-        <Metric label="Profit Factor" value={data.profit_factor === Infinity ? '∞' : data.profit_factor.toFixed(2)} />
+        {/* null = backend's float('inf') (no losing trades) — JSON drops Infinity */}
+        <Metric label="Profit Factor" value={data.profit_factor == null ? 'inf' : data.profit_factor.toFixed(2)} />
         <Metric label="Max Drawdown" value={`${data.max_drawdown.toFixed(2)}%`} />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
