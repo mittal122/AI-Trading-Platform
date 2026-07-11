@@ -158,7 +158,7 @@ export default function SmcAutoTest() {
                 </span>
               </div>
               <p className="num text-[10px] text-fg-faint mt-1">
-                held since {order.opened_at.slice(11, 19)} UTC · price {order.current_price}
+                held since {new Date(order.opened_at).toLocaleTimeString('en-GB')} · price {order.current_price}
               </p>
             </>
           ) : (
@@ -218,7 +218,7 @@ export default function SmcAutoTest() {
             <table className="w-full text-[12.5px]">
               <thead>
                 <tr>
-                  <th className="th pl-3">Time (UTC)</th>
+                  <th className="th pl-3">Time</th>
                   <th className="th">Action</th>
                   <th className="th">Detail</th>
                   <th className="th pr-3 text-right">Long / Short score</th>
@@ -227,7 +227,7 @@ export default function SmcAutoTest() {
               <tbody>
                 {st!.events.map((e, i) => (
                   <tr key={i} className="row-hover">
-                    <td className="td num pl-3 text-fg-faint">{e.time.slice(11, 19)}</td>
+                    <td className="td num pl-3 text-fg-faint">{new Date(e.time).toLocaleTimeString('en-GB')}</td>
                     <td className="td"><span className={`chip ${ACTION_CHIP[e.action] ?? 'chip-muted'}`}>{e.action}</span></td>
                     <td className="td text-fg-soft">{e.detail}</td>
                     <td className="td num pr-3 text-right text-fg-faint">

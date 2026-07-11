@@ -5,7 +5,8 @@ import type { Ticker24h } from '../../api/client'
 
 const OVERVIEW_POLL_MS = 20_000
 
-/** Command bar: brand mark, scrolling market tape, backend status, UTC clock. */
+/** Command bar: brand mark, scrolling market tape, backend status, and a
+ * clock in the user's own timezone (with a small UTC reference). */
 export default function TopBar() {
   const [tape, setTape] = useState<Ticker24h[]>([])
   const [online, setOnline] = useState<boolean | null>(null)
@@ -66,7 +67,10 @@ export default function TopBar() {
           />
           {online === null ? 'connecting' : online ? 'live' : 'offline'}
         </span>
-        <span className="num text-[11px] text-fg-faint border-l border-line pl-3">{clock} UTC</span>
+        <span className="num text-[11px] border-l border-line pl-3">
+          <span className="text-fg-soft">{clock.local} {TZ_LABEL}</span>
+          <span className="text-fg-faint"> · {clock.utc} UTC</span>
+        </span>
       </div>
     </header>
   )
@@ -91,6 +95,16 @@ function fmtPrice(p: number): string {
   return p.toPrecision(3)
 }
 
-function utcNow(): string {
-  return new Date().toISOString().slice(11, 19)
+// User's own timezone (e.g. "IST", "GMT+5:30") — resolved once, the browser
+// keeps the local clock in sync automatically.
+const TZ_LABEL = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' })
+  .formatToParts(new Date())
+  .find(p => p.type === 'timeZoneName')?.value ?? ''
+
+function utcNow(): { local: string; utc: string } {
+  const now = new Date()
+  return {
+    local: now.toLocaleTimeString('en-GB'),
+    utc: now.toISOString().slice(11, 16),
+  }
 }
