@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import {
-  createChart, ColorType, CandlestickSeries, LineSeries, createSeriesMarkers,
+  createChart, ColorType, CandlestickSeries, HistogramSeries, LineSeries, createSeriesMarkers,
 } from 'lightweight-charts'
 import type {
-  IChartApi, ISeriesApi, IPriceLine, ISeriesMarkersPluginApi, Time, UTCTimestamp,
+  IChartApi, ISeriesApi, IPriceLine, ISeriesMarkersPluginApi, LogicalRange, Time, UTCTimestamp,
   MouseEventParams,
 } from 'lightweight-charts'
 import { Circle, Maximize2, Minimize2, Pencil } from 'lucide-react'
 import { RectanglesPrimitive } from '../lib/rectanglePrimitive'
 import type { RectangleSpec } from '../lib/rectanglePrimitive'
-import { getSmcAnalysis, getLiveMarket } from '../api/client'
+import { getSmcAnalysis, getLiveMarket, getMarket } from '../api/client'
 import type { SmcAnalysis } from '../api/client'
 import SymbolSearchInput from '../components/SymbolSearchInput'
 import { usePersistedState } from '../hooks/usePersistedState'
@@ -23,16 +23,18 @@ import SmcFreezeBar from '../components/smc/SmcFreezeBar'
 
 const INTERVALS = ['5m', '15m', '30m', '1h', '4h', '1d']
 
-type LayerKey = 'zones' | 'structure' | 'liquidity' | 'sweeps' | 'inducements' | 'equilibrium' | 'plan' | 'swings'
+type LayerKey = 'zones' | 'structure' | 'liquidity' | 'sweeps' | 'inducements' | 'equilibrium' | 'plan' | 'swings' | 'volume'
 const LAYER_DEFS: { key: LayerKey; label: string }[] = [
   { key: 'zones', label: 'Zones' }, { key: 'structure', label: 'BOS/CHoCH' },
   { key: 'plan', label: 'Trade plan' }, { key: 'liquidity', label: 'Liquidity' },
-  { key: 'equilibrium', label: 'Equilibrium' }, { key: 'sweeps', label: 'Sweeps' },
+  { key: 'equilibrium', label: 'Equilibrium' }, { key: 'volume', label: 'Volume' },
+  { key: 'sweeps', label: 'Sweeps' },
   { key: 'swings', label: 'Swings' }, { key: 'inducements', label: 'Inducements' },
 ]
 const DEFAULT_LAYERS: Record<LayerKey, boolean> = {
   zones: true, structure: true, plan: true, liquidity: true,
   equilibrium: true, sweeps: true, swings: false, inducements: false,
+  volume: true,
 }
 
 const toSec = (iso: string) => Math.floor(Date.parse(iso) / 1000) as UTCTimestamp
@@ -64,7 +66,10 @@ export default function SmcAnalyzer() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [layers, setLayers] = usePersistedState<Record<LayerKey, boolean>>('smc.layers', DEFAULT_LAYERS)
-  const toggle = (k: LayerKey) => setLayers(l => ({ ...l, [k]: !l[k] }))
+  // Persisted layer maps from before a key existed won't have it — fall back
+  // to the default so a newly added layer (e.g. volume) still shows/toggles.
+  const layerOn = (k: LayerKey) => layers[k] ?? DEFAULT_LAYERS[k]
+  const toggle = (k: LayerKey) => setLayers(l => ({ ...l, [k]: !(l[k] ?? DEFAULT_LAYERS[k]) }))
 
   // Drawn trend lines, persisted per symbol+interval (a map keyed by both).
   type TL = { p1: { time: number; price: number }; p2: { time: number; price: number } }
@@ -121,6 +126,62 @@ export default function SmcAnalyzer() {
   const chartIntervalRef = useRef<string | null>(null)
   const lastCandleTimeRef = useRef<number | null>(null)
   const refreshingRef = useRef(false)
+
+  // ── Scroll-back pagination state ──
+  // The analysis ships only its own 500-candle window; panning left past it
+  // showed a blank chart. Older candles are lazy-loaded from /market/history
+  // as the user scrolls (same mechanism as the Terminal/Analysis charts).
+  type Bar = { time: UTCTimestamp; open: number; high: number; low: number; close: number; volume: number }
+  const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null)
+  const allBarsRef = useRef<Bar[]>([])
+  const hasMoreRef = useRef(true)
+  const loadingMoreRef = useRef(false)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+
+  const volBar = (b: Bar) => ({
+    time: b.time, value: b.volume,
+    color: b.close >= b.open ? '#2ebd8566' : '#f6465d66',
+  })
+
+  async function loadOlder() {
+    const chart = chartApiRef.current, series = candleSeriesRef.current
+    const sym = chartSymbolRef.current, itv = chartIntervalRef.current
+    const bars = allBarsRef.current
+    if (!chart || !series || !sym || !itv || bars.length === 0) return
+    if (loadingMoreRef.current || !hasMoreRef.current) return
+    loadingMoreRef.current = true
+    setLoadingOlder(true)
+    try {
+      const endTime = (bars[0].time as number) * 1000 - 1
+      const res = await getMarket(sym, itv, 500, endTime)
+      const older = res.data.candles
+      if (!Array.isArray(older) || older.length === 0) { hasMoreRef.current = false; return }
+      const firstTime = bars[0].time as number
+      const newBars: Bar[] = older
+        .map(c => ({
+          time: toSec(c.timestamp), open: c.open, high: c.high, low: c.low, close: c.close,
+          volume: c.volume,
+        }))
+        .filter(b => Number.isFinite(b.time as number) && (b.time as number) < firstTime)
+      if (newBars.length === 0) { hasMoreRef.current = false; return }
+      allBarsRef.current = [...newBars, ...bars]
+      const prev = chart.timeScale().getVisibleLogicalRange()
+      series.setData(allBarsRef.current)
+      volumeSeriesRef.current?.setData(allBarsRef.current.map(volBar))
+      // setData resets the viewport — shift the visible range by the number
+      // of prepended bars so the user's scroll position doesn't jump.
+      if (prev) {
+        chart.timeScale().setVisibleLogicalRange({
+          from: prev.from + newBars.length, to: prev.to + newBars.length,
+        })
+      }
+      if (older.length < 500) hasMoreRef.current = false
+    } catch { /* retried on next scroll */ } finally {
+      loadingMoreRef.current = false
+      setLoadingOlder(false)
+    }
+  }
+  const loadOlderRef = useRef(loadOlder); loadOlderRef.current = loadOlder
   useEffect(() => {
     const id = window.setInterval(async () => {
       const series = candleSeriesRef.current
@@ -134,7 +195,14 @@ export default function SmcAnalyzer() {
         // permanently breaks the series' rendering ("Value is null" on every
         // repaint until remount).
         if (!Number.isFinite(t) || !Number.isFinite(live.close) || t < last) return
-        series.update({ time: t, open: live.open, high: live.high, low: live.low, close: live.close })
+        const bar = { time: t, open: live.open, high: live.high, low: live.low, close: live.close, volume: live.volume }
+        series.update(bar)
+        volumeSeriesRef.current?.update(volBar(bar))
+        const bars = allBarsRef.current
+        if (bars.length > 0) {
+          if ((bars[bars.length - 1].time as number) === (t as number)) bars[bars.length - 1] = bar
+          else if ((t as number) > (bars[bars.length - 1].time as number)) bars.push(bar)
+        }
         if (t > last && !refreshingRef.current) {
           refreshingRef.current = true
           try { await runRef.current(true) } finally { refreshingRef.current = false }
@@ -175,6 +243,26 @@ export default function SmcAnalyzer() {
     series.attachPrimitive(rect)
     rectRef.current = rect
 
+    // Volume histogram pinned to the bottom ~18% of the pane, on its own
+    // hidden price scale so it never distorts the candle scale.
+    const vol = chart.addSeries(HistogramSeries, {
+      priceScaleId: 'vol',
+      priceFormat: { type: 'volume' },
+      lastValueVisible: false,
+      priceLineVisible: false,
+    })
+    chart.priceScale('vol').applyOptions({
+      scaleMargins: { top: 0.82, bottom: 0 },
+      visible: false,
+    })
+    volumeSeriesRef.current = vol
+
+    // Lazy-load older candles when the user pans near the left edge.
+    const onRange = (range: LogicalRange | null) => {
+      if (range && range.from <= 20) loadOlderRef.current()
+    }
+    chart.timeScale().subscribeVisibleLogicalRangeChange(onRange)
+
     // Trend-line drawing: two clicks (bar-time + price) define a segment.
     const clickHandler = (param: MouseEventParams) => {
       if (!drawModeRef.current || !param.point || param.time === undefined) return
@@ -200,6 +288,7 @@ export default function SmcAnalyzer() {
     return () => {
       window.removeEventListener('resize', resize)
       document.removeEventListener('fullscreenchange', onFsChange)
+      chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange)
       chart.unsubscribeClick(clickHandler)
       chart.remove()
     }
@@ -212,9 +301,24 @@ export default function SmcAnalyzer() {
     const candles = analysis.candles
     const at = (idx: number) => toSec(candles[Math.max(0, Math.min(candles.length - 1, idx))].time)
 
-    series.setData(candles.map(c => ({
+    // Merge the analysis window with any older candles already lazy-loaded
+    // by scrolling — a quiet re-analyze must not wipe scrolled-back history.
+    const analysisBars = candles.map(c => ({
       time: toSec(c.time), open: c.open, high: c.high, low: c.low, close: c.close,
-    })))
+      volume: c.volume,
+    }))
+    const sameChart = chartSymbolRef.current === analysis.symbol
+      && chartIntervalRef.current === analysis.interval
+    const firstAnalysisTime = analysisBars[0]?.time as number
+    const olderPrefix = sameChart
+      ? allBarsRef.current.filter(b => (b.time as number) < firstAnalysisTime)
+      : []
+    if (!sameChart) hasMoreRef.current = true
+    allBarsRef.current = [...olderPrefix, ...analysisBars]
+
+    series.setData(allBarsRef.current)
+    volumeSeriesRef.current?.setData(allBarsRef.current.map(volBar))
+    volumeSeriesRef.current?.applyOptions({ visible: layerOn('volume') })
 
     const lastTime = toSec(candles[candles.length - 1].time)
     const backstopTime = toSec(candles[Math.max(0, candles.length - 40)].time)
@@ -295,8 +399,14 @@ export default function SmcAnalyzer() {
     markers.sort((a, b) => (a.time as number) - (b.time as number))
     markersRef.current?.setMarkers(markers)
 
-    chart.timeScale().fitContent()
-    series.priceScale().applyOptions({ autoScale: true })
+    // Reset the viewport only when the chart actually changed coin/timeframe.
+    // Quiet per-candle re-analyses and layer toggles must NOT yank the user's
+    // scroll/zoom (fitContent over lazy-loaded history would zoom out to
+    // thousands of bars).
+    if (!sameChart) {
+      chart.timeScale().fitContent()
+      series.priceScale().applyOptions({ autoScale: true })
+    }
   }, [analysis, layers])
 
   // Redraw user-drawn trend lines whenever they change (or the symbol/tf does).
@@ -364,10 +474,11 @@ export default function SmcAnalyzer() {
                   </span>
                 )}
                 {LAYER_DEFS.map(l => (
-                  <button key={l.key} onClick={() => toggle(l.key)} className={pill(layers[l.key])}>
+                  <button key={l.key} onClick={() => toggle(l.key)} className={pill(layerOn(l.key))}>
                     {l.label}
                   </button>
                 ))}
+                {loadingOlder && <span className="text-[10px] text-accent ml-1">loading history…</span>}
                 <div className="ml-auto flex items-center gap-1.5">
                   <button onClick={() => setDrawMode(d => !d)} className={pill(drawMode)}>
                     <span className="flex items-center gap-1"><Pencil size={10} aria-label="draw" /> Trend line</span>
