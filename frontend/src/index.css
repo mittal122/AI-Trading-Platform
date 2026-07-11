@@ -1,26 +1,199 @@
+/* ==========================================================================
+   Obsidian Terminal — design system
+   Dark, dense, precise. Amber is the single brand accent; green/red are
+   reserved exclusively for market direction. All numerals render in
+   JetBrains Mono with tabular figures so columns never shift.
+   ========================================================================== */
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
 @import "tailwindcss";
+
+@theme {
+  /* Surfaces — three elevation steps, never pure black */
+  --color-bg: #0b0d12;
+  --color-surface: #11141b;
+  --color-raised: #171b25;
+  --color-line: #232837;
+  --color-line-strong: #303748;
+
+  /* Text */
+  --color-fg: #e8ecf4;
+  --color-fg-soft: #98a1b3;
+  --color-fg-faint: #5c6475;
+
+  /* Brand accent (gold/amber — focus, active nav, CTAs) */
+  --color-accent: #f5a623;
+  --color-accent-soft: #f5a62326;
+  --color-on-accent: #14161c;
+
+  /* Market semantics — up/down only, never decoration */
+  --color-up: #2ebd85;
+  --color-up-soft: #2ebd8522;
+  --color-down: #f6465d;
+  --color-down-soft: #f6465d22;
+  --color-warn: #f5a623;
+
+  --font-sans: 'Inter Variable', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, monospace;
+
+  --radius-card: 8px;
+  --radius-ctl: 6px;
+}
 
 body {
   margin: 0;
-  background: #0f1117;
-  color: #e2e8f0;
-  font-family: 'Inter', system-ui, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-#root {
-  min-height: 100vh;
+#root { min-height: 100vh; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #2a3040; border-radius: 4px; border: 2px solid var(--color-bg); }
+::-webkit-scrollbar-thumb:hover { background: #39415a; }
+
+::selection { background: #f5a62355; }
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: #0f1117; }
-::-webkit-scrollbar-thumb { background: #2a2d3e; border-radius: 3px; }
+@layer components {
+  /* ---- Panels ---- */
+  .card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+  }
+  .card-pad { padding: 1rem; }
+  .panel-title {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-fg-faint);
+  }
+
+  /* ---- Numerals ---- */
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+  }
+
+  /* ---- Buttons ---- */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem;
+    height: 32px; padding: 0 0.75rem;
+    border-radius: var(--radius-ctl);
+    border: 1px solid var(--color-line-strong);
+    background: var(--color-raised);
+    color: var(--color-fg-soft);
+    font-size: 12.5px; font-weight: 500;
+    cursor: pointer; user-select: none;
+    white-space: nowrap; /* a button label must never wrap out of its box */
+    transition: color 150ms, background 150ms, border-color 150ms;
+  }
+  .btn:hover { color: var(--color-fg); border-color: #3d465c; background: #1c2130; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .btn-primary {
+    background: var(--color-accent); border-color: var(--color-accent); color: var(--color-on-accent);
+    font-weight: 600;
+  }
+  .btn-primary:hover { background: #ffb63e; border-color: #ffb63e; color: var(--color-on-accent); }
+  .btn-buy  { background: var(--color-up); border-color: var(--color-up); color: #06120d; font-weight: 600; }
+  .btn-buy:hover  { background: #35d698; border-color: #35d698; color: #06120d; }
+  .btn-sell { background: var(--color-down); border-color: var(--color-down); color: #fff; font-weight: 600; }
+  .btn-sell:hover { background: #ff5a70; border-color: #ff5a70; color: #fff; }
+  .btn-ghost { background: transparent; border-color: transparent; }
+  .btn-ghost:hover { background: var(--color-raised); border-color: transparent; }
+  .btn-danger-outline { border-color: #f6465d66; color: var(--color-down); background: transparent; }
+  .btn-danger-outline:hover { background: var(--color-down-soft); border-color: var(--color-down); color: var(--color-down); }
+
+  /* ---- Inputs ---- */
+  .input {
+    height: 32px; padding: 0 0.625rem;
+    background: var(--color-bg);
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-ctl);
+    color: var(--color-fg);
+    font-size: 13px;
+    transition: border-color 150ms;
+    width: 100%;
+  }
+  .input::placeholder { color: var(--color-fg-faint); }
+  .input:focus { outline: none; border-color: var(--color-accent); }
+  .input-mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  select.input { cursor: pointer; }
+  .field-label {
+    display: block;
+    font-size: 11px; font-weight: 500;
+    color: var(--color-fg-soft);
+    margin-bottom: 0.25rem;
+  }
+
+  /* ---- Tables ---- */
+  .th {
+    padding: 0.375rem 0.625rem;
+    font-size: 10.5px; font-weight: 600;
+    letter-spacing: 0.07em; text-transform: uppercase;
+    color: var(--color-fg-faint);
+    text-align: left;
+    border-bottom: 1px solid var(--color-line);
+    white-space: nowrap;
+  }
+  .td {
+    padding: 0.4375rem 0.625rem;
+    font-size: 12.5px;
+    color: var(--color-fg-soft);
+    border-bottom: 1px solid #1a1f2b;
+    white-space: nowrap;
+  }
+  .row-hover { transition: background 100ms; }
+  .row-hover:hover { background: #161b26; }
+
+  /* ---- Chips / badges ---- */
+  .chip {
+    display: inline-flex; align-items: center; gap: 0.25rem;
+    height: 20px; padding: 0 0.5rem;
+    border-radius: 4px;
+    font-size: 11px; font-weight: 600;
+    border: 1px solid transparent;
+  }
+  .chip-up    { background: var(--color-up-soft);   color: var(--color-up);   border-color: #2ebd8540; }
+  .chip-down  { background: var(--color-down-soft); color: var(--color-down); border-color: #f6465d40; }
+  .chip-warn  { background: var(--color-accent-soft); color: var(--color-accent); border-color: #f5a62340; }
+  .chip-muted { background: #232837aa; color: var(--color-fg-soft); border-color: var(--color-line-strong); }
+}
+
+/* Ticker tape scroll (top bar) — pausable, reduced-motion aware */
+@keyframes tape-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.tape-scroll { animation: tape-scroll 45s linear infinite; }
+.tape-scroll:hover { animation-play-state: paused; }
 
 /* Indeterminate progress bar — analysis tools scan feedback */
 @keyframes tool-scan-bar {
   0%   { transform: translateX(-100%); }
   100% { transform: translateX(350%); }
 }
-.tool-scan-bar {
-  animation: tool-scan-bar 1s ease-in-out infinite;
+.tool-scan-bar { animation: tool-scan-bar 1s ease-in-out infinite; }
+
+/* Live price pulse — one soft blink when a tick lands */
+@keyframes tick-flash-up   { 0% { background: var(--color-up-soft); }   100% { background: transparent; } }
+@keyframes tick-flash-down { 0% { background: var(--color-down-soft); } 100% { background: transparent; } }
+.tick-up   { animation: tick-flash-up 600ms ease-out; }
+.tick-down { animation: tick-flash-down 600ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  .tape-scroll, .tool-scan-bar, .tick-up, .tick-down { animation: none; }
+  * { transition-duration: 0.01ms !important; }
 }

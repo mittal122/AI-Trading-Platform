@@ -11,13 +11,20 @@ export function usePersistedState<T>(key: string, defaultValue: T) {
     }
   })
 
-  function set(next: T) {
-    setValue(next)
-    try {
-      localStorage.setItem(key, JSON.stringify(next))
-    } catch {
-      // storage unavailable (private mode, quota) — state still works in-memory
-    }
+  function set(next: T | ((prev: T) => T)) {
+    setValue(prev => {
+      // Resolve functional updaters HERE so the persisted value is the real
+      // next state — passing the updater function itself to JSON.stringify
+      // wrote the string "undefined" and silently killed persistence for
+      // every functional set (e.g. the SMC layer toggles).
+      const resolved = typeof next === 'function' ? (next as (prev: T) => T)(prev) : next
+      try {
+        localStorage.setItem(key, JSON.stringify(resolved))
+      } catch {
+        // storage unavailable (private mode, quota) — state still works in-memory
+      }
+      return resolved
+    })
   }
 
   return [value, set] as const

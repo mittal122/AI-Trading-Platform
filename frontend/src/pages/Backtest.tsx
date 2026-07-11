@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from 'react'
+import { ChevronDown, ChevronRight, Play, Trash2 } from 'lucide-react'
 import {
   getBacktestHistory, runAndRecordBacktest, getPortfolioAnalytics,
   deleteBacktestRun, deleteAllBacktestRuns,
@@ -16,18 +17,20 @@ const PAGE_SIZE_OPTIONS = [
   { label: 'All', value: 1000 },
 ]
 
+const signCls = (v: number) => (v >= 0 ? 'text-up' : 'text-down')
+
 function DetailRow({ r }: { r: BacktestRunItem }) {
   return (
-    <tr className="bg-[#0f1117]/50">
-      <td colSpan={11} className="px-4 py-3">
+    <tr className="bg-raised">
+      <td colSpan={12} className="px-4 py-3">
         <div className="grid grid-cols-3 md:grid-cols-7 gap-3 text-xs">
-          <div><p className="text-slate-500">Winning</p><p className="text-green-400 font-medium">{r.winning_trades}</p></div>
-          <div><p className="text-slate-500">Losing</p><p className="text-red-400 font-medium">{r.losing_trades}</p></div>
-          <div><p className="text-slate-500">Avg Win</p><p className="text-white font-medium">${r.avg_win.toFixed(2)}</p></div>
-          <div><p className="text-slate-500">Avg Loss</p><p className="text-white font-medium">${r.avg_loss.toFixed(2)}</p></div>
-          <div><p className="text-slate-500">Expectancy</p><p className="text-white font-medium">${r.expectancy.toFixed(2)}</p></div>
-          <div><p className="text-slate-500">Sortino</p><p className="text-white font-medium">{r.sortino_ratio.toFixed(3)}</p></div>
-          <div><p className="text-slate-500">Calmar</p><p className="text-white font-medium">{r.calmar_ratio.toFixed(3)}</p></div>
+          <div><p className="text-fg-faint">Winning</p><p className="num text-up font-medium">{r.winning_trades}</p></div>
+          <div><p className="text-fg-faint">Losing</p><p className="num text-down font-medium">{r.losing_trades}</p></div>
+          <div><p className="text-fg-faint">Avg Win</p><p className="num text-fg font-medium">${r.avg_win.toFixed(2)}</p></div>
+          <div><p className="text-fg-faint">Avg Loss</p><p className="num text-fg font-medium">${r.avg_loss.toFixed(2)}</p></div>
+          <div><p className="text-fg-faint">Expectancy</p><p className="num text-fg font-medium">${r.expectancy.toFixed(2)}</p></div>
+          <div><p className="text-fg-faint">Sortino</p><p className="num text-fg font-medium">{r.sortino_ratio.toFixed(3)}</p></div>
+          <div><p className="text-fg-faint">Calmar</p><p className="num text-fg font-medium">{r.calmar_ratio.toFixed(3)}</p></div>
         </div>
       </td>
     </tr>
@@ -40,46 +43,48 @@ function HistoryTable({ rows, onDeleteRow, expanded, toggleExpand }: {
   expanded: Set<number>
   toggleExpand: (id: number) => void
 }) {
-  if (!rows.length) return <p className="text-slate-500 text-sm text-center py-6">No runs yet</p>
+  if (!rows.length) return <p className="text-fg-faint text-sm text-center py-6">No runs yet</p>
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <table className="w-full text-[12.5px]">
         <thead>
-          <tr className="text-xs text-slate-500 border-b border-[#2a2d3e] text-left">
-            <th className="pb-2 pr-4 w-4"></th>
-            <th className="pb-2 pr-4">Strategy</th><th className="pb-2 pr-4">Symbol</th>
-            <th className="pb-2 pr-4">Interval</th><th className="pb-2 pr-4">Candles</th>
-            <th className="pb-2 pr-4">Return</th><th className="pb-2 pr-4">Trades</th>
-            <th className="pb-2 pr-4">Win%</th><th className="pb-2 pr-4">Avg Time to Win</th>
-            <th className="pb-2 pr-4">Sharpe</th>
-            <th className="pb-2 pr-4">Time</th><th className="pb-2"></th>
+          <tr>
+            <th className="th w-4"></th>
+            <th className="th">Strategy</th><th className="th">Symbol</th>
+            <th className="th">Interval</th><th className="th">Candles</th>
+            <th className="th">Return</th><th className="th">Trades</th>
+            <th className="th">Win%</th><th className="th">Avg Time to Win</th>
+            <th className="th">Sharpe</th>
+            <th className="th">Time</th><th className="th"></th>
           </tr>
         </thead>
         <tbody>
           {rows.map(r => (
             <Fragment key={r.id}>
-              <tr className="border-b border-[#2a2d3e]/50 hover:bg-[#0f1117]/30">
-                <td className="py-2 pr-2">
-                  <button onClick={() => toggleExpand(r.id)} className="text-slate-500 hover:text-indigo-400 w-5">
-                    {expanded.has(r.id) ? '▾' : '▸'}
+              <tr className="row-hover border-b border-line/50">
+                <td className="td pr-2">
+                  <button onClick={() => toggleExpand(r.id)}
+                    aria-label={expanded.has(r.id) ? 'Collapse detail' : 'Expand detail'}
+                    className="text-fg-faint hover:text-accent w-5 cursor-pointer">
+                    {expanded.has(r.id) ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                   </button>
                 </td>
-                <td className="py-2 pr-4 font-medium">{r.strategy}</td>
-                <td className="py-2 pr-4 text-slate-400">{r.symbol}</td>
-                <td className="py-2 pr-4 text-slate-400">{r.interval}</td>
-                <td className="py-2 pr-4 text-slate-400">{r.limit}</td>
-                <td className={`py-2 pr-4 font-semibold ${r.total_return >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                <td className="td font-medium text-fg">{r.strategy}</td>
+                <td className="td text-fg-soft">{r.symbol}</td>
+                <td className="td num text-fg-soft">{r.interval}</td>
+                <td className="td num text-fg-soft">{r.limit}</td>
+                <td className={`td num font-semibold ${signCls(r.total_return)}`}>
                   {r.total_return >= 0 ? '+' : ''}{r.total_return.toFixed(2)}%
                 </td>
-                <td className="py-2 pr-4 text-slate-400">{r.total_trades}</td>
-                <td className="py-2 pr-4 text-slate-400">{r.win_rate.toFixed(1)}%</td>
-                <td className="py-2 pr-4 text-indigo-400">{r.avg_time_to_win_display || '—'}</td>
-                <td className="py-2 pr-4 text-slate-400">{r.sharpe_ratio.toFixed(2)}</td>
-                <td className="py-2 pr-4 text-slate-600 text-xs">{new Date(r.created_at).toLocaleString()}</td>
-                <td className="py-2">
-                  <button onClick={() => onDeleteRow(r.id)}
-                    className="text-slate-600 hover:text-red-400 text-xs px-2 py-0.5 rounded border border-transparent hover:border-red-500/30">
-                    ✕
+                <td className="td num text-fg-soft">{r.total_trades}</td>
+                <td className={`td num ${signCls(r.win_rate - 50)}`}>{r.win_rate.toFixed(1)}%</td>
+                <td className="td num text-fg-soft">{r.avg_time_to_win_display || '—'}</td>
+                <td className="td num text-fg-soft">{r.sharpe_ratio.toFixed(2)}</td>
+                <td className="td num text-fg-faint text-xs">{new Date(r.created_at).toLocaleString()}</td>
+                <td className="td">
+                  <button onClick={() => onDeleteRow(r.id)} aria-label="Delete run"
+                    className="text-fg-faint hover:text-down px-1.5 py-0.5 cursor-pointer">
+                    <Trash2 size={13} />
                   </button>
                 </td>
               </tr>
@@ -192,92 +197,95 @@ export default function Backtest() {
   useEffect(() => { loadHistory() }, [pageSize])
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-xl font-bold text-white">Backtest</h1>
-
-      {/* Config */}
-      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+    <div className="p-3 space-y-3 max-w-[1800px] mx-auto">
+      {/* Config toolbar */}
+      <div className="card card-pad">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div>
-            <label className="text-xs text-slate-500 mb-1 block">Symbol</label>
+            <label className="field-label mb-1 block">Symbol</label>
             <SymbolSearchInput value={symbol} onCommit={setSymbol} />
           </div>
           <div>
-            <label className="text-xs text-slate-500 mb-1 block">Strategy</label>
-            <select value={strategy} onChange={e => setStrategy(e.target.value)}
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none">
+            <label className="field-label mb-1 block">Strategy</label>
+            <select value={strategy} onChange={e => setStrategy(e.target.value)} className="input w-full">
               {STRATEGIES.map(s => <option key={s}>{s}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-xs text-slate-500 mb-1 block">Interval</label>
-            <select value={interval} onChange={e => setInterval(e.target.value)}
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none">
+            <label className="field-label mb-1 block">Interval</label>
+            <select value={interval} onChange={e => setInterval(e.target.value)} className="input w-full">
               {INTERVALS.map(i => <option key={i}>{i}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-xs text-slate-500 mb-1 block">Candles</label>
-            <input type="number" value={limit} onChange={e => setLimit(e.target.value)}
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none" />
+            <label className="field-label mb-1 block">Candles</label>
+            <input type="number" value={limit} onChange={e => setLimit(e.target.value)} className="input input-mono w-full" />
           </div>
           <div className="flex items-end gap-2">
             <button onClick={run} disabled={running || multiRunning}
-              className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg">
+              className="btn btn-primary flex-1">
+              <Play size={13} aria-label="Run backtest" />
               {running ? 'Running…' : 'Run Backtest'}
             </button>
           </div>
         </div>
-        <div className="mt-4 pt-4 border-t border-[#2a2d3e]">
+        <div className="mt-3 pt-3 border-t border-line">
           <button onClick={runAllTimeframes} disabled={running || multiRunning}
-            className="w-full py-2 bg-purple-600/80 hover:bg-purple-600 disabled:opacity-50 text-white text-sm font-medium rounded-lg">
+            className="btn w-full">
             {multiRunning ? multiProgress : `Backtest All Timeframes (${strategy} · ${symbol.toUpperCase()})`}
           </button>
-          <p className="text-xs text-slate-600 mt-1">Runs {strategy} on {symbol.toUpperCase()} across every interval — see which timeframe performs best.</p>
+          <p className="text-xs text-fg-faint mt-1">Runs {strategy} on {symbol.toUpperCase()} across every interval — see which timeframe performs best.</p>
         </div>
       </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm">{error}</div>
+        <div className="card card-pad border-down/40 text-down text-sm">{error}</div>
       )}
 
       {analytics && (
-        <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-slate-300 mb-4">Results</h2>
-          <PortfolioSummary data={analytics} />
+        <div className="card">
+          <header className="flex items-center justify-between px-3 pt-3 pb-2">
+            <h2 className="panel-title">Results</h2>
+          </header>
+          <div className="px-3 pb-3">
+            <PortfolioSummary data={analytics} />
+          </div>
         </div>
       )}
 
       {/* Multi-timeframe results */}
       {multiResults.length > 0 && (
-        <div className="bg-[#1a1d27] border border-purple-500/30 rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-purple-300 mb-1">All-Timeframe Results — {strategy} on {symbol.toUpperCase()}</h2>
-          <p className="text-xs text-slate-500 mb-4">Sorted by return. Click a row to expand full detail.</p>
-          <HistoryTable rows={multiResults} onDeleteRow={() => {}} expanded={multiExpanded} toggleExpand={toggleMultiExpand} />
+        <div className="card">
+          <header className="px-3 pt-3 pb-2">
+            <h2 className="panel-title">All-Timeframe Results — {strategy} on {symbol.toUpperCase()}</h2>
+            <p className="text-xs text-fg-faint mt-0.5">Sorted by return. Click a row to expand full detail.</p>
+          </header>
+          <div className="px-3 pb-3">
+            <HistoryTable rows={multiResults} onDeleteRow={() => {}} expanded={multiExpanded} toggleExpand={toggleMultiExpand} />
+          </div>
         </div>
       )}
 
       {/* History */}
-      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5">
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
-          <h2 className="text-sm font-semibold text-slate-300">Recent Runs ({total} total)</h2>
-          <div className="flex items-center gap-3">
-            <label className="text-xs text-slate-500">Show:</label>
+      <div className="card">
+        <header className="flex items-center justify-between px-3 pt-3 pb-2 flex-wrap gap-3">
+          <h2 className="panel-title">Recent Runs <span className="num text-fg-faint">({total} total)</span></h2>
+          <div className="flex items-center gap-2">
+            <label className="field-label">Show:</label>
             <select value={pageSize} onChange={e => setPageSize(Number(e.target.value))}
-              className="bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-2 py-1 text-xs text-white outline-none">
+              className="input !h-6 !px-2 text-xs">
               {PAGE_SIZE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
             <button onClick={handleDeleteAll} disabled={total === 0}
-              className={`text-xs px-3 py-1.5 rounded-lg border disabled:opacity-40 transition-colors ${
-                confirmDeleteAll
-                  ? 'bg-red-600 text-white border-red-600'
-                  : 'bg-red-500/10 text-red-400 border-red-500/30 hover:bg-red-500/20'
-              }`}>
+              className={`btn btn-danger-outline !h-6 text-xs ${confirmDeleteAll ? '!bg-down !text-fg' : ''}`}>
+              <Trash2 size={12} aria-label="Delete all history" />
               {confirmDeleteAll ? 'Click again to confirm' : 'Delete All History'}
             </button>
           </div>
+        </header>
+        <div className="px-3 pb-3">
+          <HistoryTable rows={history} onDeleteRow={handleDeleteRow} expanded={expanded} toggleExpand={toggleExpand} />
         </div>
-        <HistoryTable rows={history} onDeleteRow={handleDeleteRow} expanded={expanded} toggleExpand={toggleExpand} />
       </div>
     </div>
   )

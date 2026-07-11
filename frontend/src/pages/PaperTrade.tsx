@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { getPaperStatus, startPaper, stopPaper, getManualOrders, getTradeHistory, getLiveMarket, placePaperOrder } from '../api/client'
+import { RadioTower, RefreshCw, AlertTriangle, Check, ArrowRight, X } from 'lucide-react'
+import { getPaperStatus, startPaper, stopPaper, getManualOrders, getTradeHistory, getLiveMarket, placePaperOrder, closeManualOrder } from '../api/client'
 import type { PaperStatus, ManualPaperStatus, ManualOrder, TradeHistoryItem } from '../api/client'
 import SymbolSearchInput from '../components/SymbolSearchInput'
 import { usePersistedState } from '../hooks/usePersistedState'
@@ -19,6 +20,9 @@ function pnlPercent(o: ManualOrder, pnl: number): number {
   const basis = o.entry * o.quantity
   return basis > 0 ? (pnl / basis) * 100 : 0
 }
+
+const pnlCls = (v: number) => (v >= 0 ? 'text-up' : 'text-down')
+const dirCls = (d: string) => (d === 'BUY' ? 'text-up' : 'text-down')
 
 export default function PaperTrade() {
   const [status, setStatus] = useState<PaperStatus | null>(null)
@@ -42,11 +46,12 @@ export default function PaperTrade() {
   const [targetPrice, setTargetPrice] = useState('')
   const [riskPercent, setRiskPercent] = useState('1.0')
   const [placing, setPlacing] = useState(false)
+  const [closingId, setClosingId] = useState<number | null>(null)
   const [placeResult, setPlaceResult] = useState<{ ok: boolean; msg: string } | null>(null)
 
   // Live market price for the selected symbol — the Entry field auto-fills
   // and keeps tracking it until the user types their own value ("dirty");
-  // the ● Live badge re-syncs it on click.
+  // the Live badge re-syncs it on click.
   const [livePrice, setLivePrice] = useState<number | null>(null)
   const [entryDirty, setEntryDirty] = useState(false)
 
@@ -106,6 +111,15 @@ export default function PaperTrade() {
 
   async function refreshManual() {
     try { setManual((await getManualOrders()).data) } catch {}
+  }
+
+  async function handleCloseOrder(id: number) {
+    setClosingId(id)
+    try {
+      await closeManualOrder(id)
+      await Promise.all([refreshManual(), refreshPersistedHistory()])
+    } catch { /* order may have just closed itself — the refresh shows reality */ }
+    setClosingId(null)
   }
 
   async function refreshPersistedHistory() {
@@ -183,152 +197,184 @@ export default function PaperTrade() {
   }, [])
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Paper Trading</h1>
-        <span className={`text-xs px-2 py-1 rounded border ${live
-          ? 'bg-green-500/10 text-green-400 border-green-500/30'
-          : 'bg-slate-500/10 text-slate-500 border-slate-500/20'}`}>
-          {live ? '● WebSocket live' : '○ Polling'}
-        </span>
-      </div>
-
-      {/* Manual trade entry — Entry/Stop Loss/Target with a live RR ratio */}
-      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5 space-y-4">
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <h2 className="text-sm font-semibold text-slate-300">Manual Trade Entry</h2>
+    <div className="p-3 space-y-3 max-w-[1800px] mx-auto">
+      {/* Manual trade entry — order-ticket card with a live RR ratio */}
+      <div className="card">
+        <header className="flex items-center justify-between flex-wrap gap-2 px-3 pt-3 pb-2">
+          <h2 className="panel-title">Manual Trade Entry</h2>
           {livePrice !== null && (
-            <span className="text-xs text-slate-500">
-              {entrySymbol} live: <span className="text-white font-medium">${livePrice.toLocaleString()}</span>
+            <span className="text-[11px] text-fg-faint">
+              {entrySymbol} live <span className="num text-fg font-medium">${livePrice.toLocaleString()}</span>
             </span>
           )}
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">Symbol</label>
-            <SymbolSearchInput value={entrySymbol} onCommit={setEntrySymbol} />
+        </header>
+        <div className="px-3 pb-3 space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+            <div>
+              <label className="field-label mb-1 block">Symbol</label>
+              <SymbolSearchInput value={entrySymbol} onCommit={setEntrySymbol} />
+            </div>
+            <div>
+              <label className="field-label mb-1 block">Direction</label>
+              <div className="grid grid-cols-2 gap-1">
+                <button onClick={() => setDirection('BUY')}
+                  className={direction === 'BUY' ? 'btn btn-buy' : 'btn btn-ghost'}>
+                  BUY
+                </button>
+                <button onClick={() => setDirection('SELL')}
+                  className={direction === 'SELL' ? 'btn btn-sell' : 'btn btn-ghost'}>
+                  SELL
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="field-label mb-1 flex items-center justify-between">
+                <span>Entry</span>
+                {entryDirty ? (
+                  <button onClick={() => setEntryDirty(false)} title="Re-sync Entry to the live market price"
+                    className="flex items-center gap-0.5 text-[10px] text-accent hover:text-fg cursor-pointer">
+                    <RefreshCw size={9} aria-label="Re-sync Entry to live price" /> use live
+                  </button>
+                ) : (
+                  <span className="flex items-center gap-0.5 text-[10px] text-up"
+                    title="Entry tracks the live market price until you type your own">
+                    <RadioTower size={9} aria-label="Entry tracks live price" /> live
+                  </span>
+                )}
+              </label>
+              <input type="number" value={entryPrice}
+                onChange={e => { setEntryDirty(true); setEntryPrice(e.target.value) }}
+                placeholder={livePrice !== null ? String(livePrice) : 'loading…'}
+                className={`input input-mono w-full ${entryDirty ? '' : 'border-up/40'}`} />
+            </div>
+            <div>
+              <label className="field-label mb-1 block">Stop Loss</label>
+              <input type="number" value={stopLossPrice} onChange={e => setStopLossPrice(e.target.value)} placeholder="0.00"
+                className="input input-mono w-full text-down" />
+            </div>
+            <div>
+              <label className="field-label mb-1 block">Target</label>
+              <input type="number" value={targetPrice} onChange={e => setTargetPrice(e.target.value)} placeholder="0.00"
+                className="input input-mono w-full text-up" />
+            </div>
+            <div>
+              <label className="field-label mb-1 block">Risk %</label>
+              <input type="number" value={riskPercent} onChange={e => setRiskPercent(e.target.value)} step="0.1" min="0.1"
+                className="input input-mono w-full" />
+            </div>
           </div>
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">Direction</label>
-            <select value={direction} onChange={e => setDirection(e.target.value as 'BUY' | 'SELL')}
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none">
-              <option value="BUY">BUY</option>
-              <option value="SELL">SELL</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 mb-1 flex items-center justify-between">
-              <span>Entry</span>
-              {entryDirty ? (
-                <button onClick={() => setEntryDirty(false)} title="Re-sync Entry to the live market price"
-                  className="text-[10px] text-indigo-400 hover:text-indigo-300">↻ use live</button>
-              ) : (
-                <span className="text-[10px] text-green-400" title="Entry tracks the live market price until you type your own">● live</span>
-              )}
-            </label>
-            <input type="number" value={entryPrice}
-              onChange={e => { setEntryDirty(true); setEntryPrice(e.target.value) }}
-              placeholder={livePrice !== null ? String(livePrice) : 'loading…'}
-              className={`w-full bg-[#0f1117] border rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500 ${
-                entryDirty ? 'border-[#2a2d3e]' : 'border-green-500/30'
-              }`} />
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">Stop Loss</label>
-            <input type="number" value={stopLossPrice} onChange={e => setStopLossPrice(e.target.value)} placeholder="0.00"
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-red-400 outline-none focus:border-indigo-500" />
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">Target</label>
-            <input type="number" value={targetPrice} onChange={e => setTargetPrice(e.target.value)} placeholder="0.00"
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-green-400 outline-none focus:border-indigo-500" />
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">Risk %</label>
-            <input type="number" value={riskPercent} onChange={e => setRiskPercent(e.target.value)} step="0.1" min="0.1"
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500" />
-          </div>
-        </div>
 
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="bg-[#0f1117] rounded-lg px-4 py-2 border border-[#2a2d3e]">
-            <span className="text-xs text-slate-500 mr-2">Risk/Reward</span>
-            <span className={`text-sm font-bold ${liveRR === null ? 'text-slate-600' : liveRR >= 2 ? 'text-green-400' : liveRR >= 1 ? 'text-yellow-400' : 'text-red-400'}`}>
-              {liveRR === null ? '—' : `1:${liveRR.toFixed(2)}`}
-            </span>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="bg-raised rounded-md px-3 py-1.5 border border-line flex items-baseline gap-2">
+              <span className="field-label">R/R</span>
+              <span className={`num text-xl font-semibold leading-none ${
+                liveRR === null ? 'text-fg-faint' : liveRR >= 2 ? 'text-up' : liveRR >= 1 ? 'text-accent' : 'text-down'}`}>
+                {liveRR === null ? '—' : `1:${liveRR.toFixed(2)}`}
+              </span>
+            </div>
+            <button onClick={placeManualOrder} disabled={!formValid || placing}
+              className={`btn ${direction === 'BUY' ? 'btn-buy' : 'btn-sell'} disabled:opacity-40 disabled:cursor-not-allowed`}>
+              {placing ? 'Placing…' : `Place ${direction} Order`}
+            </button>
+            {allFilled && !levelsValid && (
+              <span className="flex items-center gap-1 text-[11px] text-accent">
+                <AlertTriangle size={11} aria-label="Invalid levels" />
+                {direction === 'BUY'
+                  ? 'For BUY: Stop Loss < Entry < Target'
+                  : 'For SELL: Target < Entry < Stop Loss'}
+              </span>
+            )}
+            {placeResult && (
+              <span className={`flex items-center gap-1 text-[11px] ${placeResult.ok ? 'text-up' : 'text-down'}`}>
+                {placeResult.ok
+                  ? <Check size={11} aria-label="Order placed" />
+                  : <AlertTriangle size={11} aria-label="Order failed" />}
+                {placeResult.msg}
+              </span>
+            )}
           </div>
-          <button onClick={placeManualOrder} disabled={!formValid || placing}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg">
-            {placing ? 'Placing…' : `Place ${direction} Order`}
-          </button>
-          {allFilled && !levelsValid && (
-            <span className="text-xs text-yellow-400">
-              ⚠ {direction === 'BUY'
-                ? 'For BUY: Stop Loss < Entry < Target'
-                : 'For SELL: Target < Entry < Stop Loss'}
-            </span>
-          )}
-          {placeResult && (
-            <span className={`text-xs ${placeResult.ok ? 'text-green-400' : 'text-red-400'}`}>
-              {placeResult.ok ? '✓ ' : '⚠ '}{placeResult.msg}
-            </span>
-          )}
         </div>
       </div>
+
+      {/* Paper account — the wallet behind ALL manual/one-click/auto-test
+          orders (ManualPaperTrader). This is where "did my paper trades make
+          money" actually lives; the auto-bot below has its own wallet. */}
+      {manual && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {(() => {
+            const start = manual.balance - manual.realized_pnl
+            const ret = start > 0 ? ((manual.equity - start) / start) * 100 : 0
+            return [
+              { label: 'Account Equity', value: `$${manual.equity.toLocaleString(undefined, { maximumFractionDigits: 2 })}` },
+              { label: 'Account Balance', value: `$${manual.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}` },
+              { label: 'Total Realized PnL', value: `${manual.realized_pnl >= 0 ? '+' : '-'}$${Math.abs(manual.realized_pnl).toFixed(2)}`, color: pnlCls(manual.realized_pnl) },
+              { label: 'Total Return', value: `${ret >= 0 ? '+' : ''}${ret.toFixed(2)}%`, color: pnlCls(ret) },
+            ].map(m => (
+              <div key={m.label} className="card px-3 py-2.5">
+                <p className="panel-title mb-1">{m.label}</p>
+                <p className={`num text-[15px] font-semibold leading-tight ${m.color ?? 'text-fg'}`}>{m.value}</p>
+              </div>
+            ))
+          })()}
+        </div>
+      )}
 
       {/* Strategy auto-bot — the server-side engine that trades a strategy's
           signals automatically on every closed candle */}
-      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5 space-y-4">
-        <div>
-          <h2 className="text-sm font-semibold text-slate-300">Strategy Auto-Bot</h2>
-          <p className="text-xs text-slate-500 mt-1">
+      <div className="card">
+        <header className="flex items-center justify-between px-3 pt-3 pb-2">
+          <h2 className="panel-title">Strategy Auto-Bot</h2>
+          <span className={`chip ${live ? 'chip-up' : 'chip-muted'}`}>
+            {live && <RadioTower size={9} aria-label="WebSocket connected" />}
+            {live ? 'WebSocket live' : 'Polling'}
+          </span>
+        </header>
+        <div className="px-3 pb-3 space-y-3">
+          <p className="text-[11px] text-fg-faint leading-relaxed">
             Watches every closed candle of the chosen symbol/interval with the selected strategy.
             When the strategy fires a BUY signal, it opens a virtual position automatically, then
             manages it hands-free (stop-loss, take-profit, trailing stop, partial exits) until close.
             Runs on the server — it keeps trading even if you close this page.
           </p>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">Symbol</label>
-            {status?.is_running ? (
-              <input value={symbol} disabled
-                className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none opacity-50" />
-            ) : (
-              <SymbolSearchInput value={symbol} onCommit={setSymbol} />
-            )}
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">Strategy</label>
-            <select value={strategy} onChange={e => setStrategy(e.target.value)} disabled={status?.is_running}
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none disabled:opacity-50">
-              {STRATEGIES.map(s => <option key={s}>{s}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">Interval</label>
-            <select value={tfInterval} onChange={e => setTfInterval(e.target.value)} disabled={status?.is_running}
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none disabled:opacity-50">
-              {['1m','3m','5m','15m','30m','1h','4h'].map(i => <option key={i}>{i}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">Balance ($)</label>
-            <input type="number" value={balance} onChange={e => setBalance(e.target.value)} disabled={status?.is_running}
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none disabled:opacity-50" />
-          </div>
-          <div className="flex items-end">
-            {status?.is_running ? (
-              <button onClick={handleStop} disabled={busy}
-                className="w-full py-2 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg">
-                {busy ? 'Stopping…' : 'Stop'}
-              </button>
-            ) : (
-              <button onClick={handleStart} disabled={busy}
-                className="w-full py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg">
-                {busy ? 'Starting…' : 'Start'}
-              </button>
-            )}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div>
+              <label className="field-label mb-1 block">Symbol</label>
+              {status?.is_running ? (
+                <input value={symbol} disabled className="input w-full opacity-50" />
+              ) : (
+                <SymbolSearchInput value={symbol} onCommit={setSymbol} />
+              )}
+            </div>
+            <div>
+              <label className="field-label mb-1 block">Strategy</label>
+              <select value={strategy} onChange={e => setStrategy(e.target.value)} disabled={status?.is_running}
+                className="input w-full disabled:opacity-50">
+                {STRATEGIES.map(s => <option key={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="field-label mb-1 block">Interval</label>
+              <select value={tfInterval} onChange={e => setTfInterval(e.target.value)} disabled={status?.is_running}
+                className="input w-full disabled:opacity-50">
+                {['1m','3m','5m','15m','30m','1h','4h'].map(i => <option key={i}>{i}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="field-label mb-1 block">Balance ($)</label>
+              <input type="number" value={balance} onChange={e => setBalance(e.target.value)} disabled={status?.is_running}
+                className="input input-mono w-full disabled:opacity-50" />
+            </div>
+            <div className="flex items-end">
+              {status?.is_running ? (
+                <button onClick={handleStop} disabled={busy} className="btn btn-danger-outline w-full disabled:opacity-50">
+                  {busy ? 'Stopping…' : 'Stop'}
+                </button>
+              ) : (
+                <button onClick={handleStart} disabled={busy} className="btn btn-primary w-full disabled:opacity-50">
+                  {busy ? 'Starting…' : 'Start'}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -336,51 +382,51 @@ export default function PaperTrade() {
       {status && (
         <>
           {/* Status banner */}
-          <div className={`rounded-xl p-4 border flex items-center gap-3 ${
-            status.is_running
-              ? 'bg-green-500/10 border-green-500/30 text-green-400'
-              : 'bg-slate-500/10 border-slate-500/20 text-slate-400'
-          }`}>
-            <span className={`w-2 h-2 rounded-full ${status.is_running ? 'bg-green-400 animate-pulse' : 'bg-slate-500'}`} />
-            <span className="text-sm font-medium">
+          <div className={`card px-3 py-2.5 flex items-center gap-3 ${
+            status.is_running ? 'border-up/40 text-up' : 'text-fg-faint'}`}>
+            <span className={`w-2 h-2 rounded-full shrink-0 ${status.is_running ? 'bg-up animate-pulse' : 'bg-fg-faint'}`} />
+            <span className="text-[12.5px] font-medium">
               {status.is_running ? `Running — ${status.symbol} ${status.interval} · ${status.strategy}` : 'Stopped (engine keeps its state — restart anytime)'}
             </span>
             {status.is_running && (
-              <span className="text-xs text-slate-500">
+              <span className="num text-[11px] text-fg-faint">
                 {status.candles_processed} candle{status.candles_processed === 1 ? '' : 's'} analyzed
                 {status.last_price ? ` · last price $${status.last_price.toLocaleString()}` : ''}
                 {status.candles_processed === 0 ? ' — waiting for the first candle to close…' : ''}
               </span>
             )}
             {status.last_signal && (
-              <span className={`ml-auto text-xs font-bold px-2 py-0.5 rounded ${
-                status.last_signal === 'BUY' ? 'bg-green-500/20 text-green-400' :
-                status.last_signal === 'SELL' ? 'bg-red-500/20 text-red-400' :
-                'bg-slate-500/20 text-slate-400'
+              <span className={`ml-auto chip ${
+                status.last_signal === 'BUY' ? 'chip-up' :
+                status.last_signal === 'SELL' ? 'chip-down' : 'chip-muted'
               }`}>{status.last_signal}</span>
             )}
           </div>
 
-          {/* Metrics */}
+          {/* Metrics — the BOT's own wallet only (separate from the paper
+              account strip above), so an idle bot showing $10,000 / $0.00 is
+              expected, not a bug. */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { label: 'Equity',       value: `$${status.equity.toLocaleString()}` },
-              { label: 'Cash',         value: `$${status.cash.toLocaleString()}` },
-              { label: 'Realized PnL', value: `$${status.realized_pnl.toFixed(2)}`, color: status.realized_pnl >= 0 ? 'text-green-400' : 'text-red-400' },
-              { label: 'Total Return', value: `${status.total_return >= 0 ? '+' : ''}${status.total_return.toFixed(2)}%`, color: status.total_return >= 0 ? 'text-green-400' : 'text-red-400' },
+              { label: 'Bot Equity',       value: `$${status.equity.toLocaleString()}` },
+              { label: 'Bot Cash',         value: `$${status.cash.toLocaleString()}` },
+              { label: 'Bot Realized PnL', value: `$${status.realized_pnl.toFixed(2)}`, color: pnlCls(status.realized_pnl) },
+              { label: 'Bot Return', value: `${status.total_return >= 0 ? '+' : ''}${status.total_return.toFixed(2)}%`, color: pnlCls(status.total_return) },
             ].map(m => (
-              <div key={m.label} className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-4">
-                <p className="text-xs text-slate-500 mb-1">{m.label}</p>
-                <p className={`text-lg font-semibold ${m.color ?? 'text-white'}`}>{m.value}</p>
+              <div key={m.label} className="card px-3 py-2.5">
+                <p className="panel-title mb-1">{m.label}</p>
+                <p className={`num text-[15px] font-semibold leading-tight ${m.color ?? 'text-fg'}`}>{m.value}</p>
               </div>
             ))}
           </div>
 
           {/* Open position */}
           {status.open_position && (
-            <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-5">
-              <h3 className="text-sm font-semibold text-indigo-300 mb-3">Open Position (auto-bot)</h3>
-              <div className="grid grid-cols-3 md:grid-cols-6 gap-3 text-sm">
+            <div className="card border-accent/40">
+              <header className="px-3 pt-3 pb-2">
+                <h3 className="panel-title text-accent">Open Position (auto-bot)</h3>
+              </header>
+              <div className="grid grid-cols-3 md:grid-cols-6 gap-3 px-3 pb-3">
                 {[
                   ['Entry', `$${status.open_position.entry_price.toFixed(2)}`],
                   ['Current', `$${status.open_position.current_price.toFixed(2)}`],
@@ -390,8 +436,9 @@ export default function PaperTrade() {
                   ['PnL', `$${status.open_position.unrealized_pnl.toFixed(2)}`],
                 ].map(([l, v]) => (
                   <div key={l}>
-                    <p className="text-xs text-slate-500">{l}</p>
-                    <p className="text-white font-medium">{v}</p>
+                    <p className="field-label">{l}</p>
+                    <p className={`num text-[12.5px] font-medium ${
+                      l === 'PnL' ? pnlCls(status.open_position!.unrealized_pnl) : 'text-fg'}`}>{v}</p>
                   </div>
                 ))}
               </div>
@@ -402,85 +449,153 @@ export default function PaperTrade() {
 
       {/* Manual paper orders — from the form above, or the "Place Paper Trade" button on Dashboard/Retail Dashboard */}
       {manual && (manual.open_orders.length > 0 || manual.closed_orders.length > 0) && (
-        <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5">
-          <h3 className="text-sm font-semibold text-slate-300 mb-3">
-            Manual Paper Orders — Equity ${manual.equity.toLocaleString()} · Realized PnL ${manual.realized_pnl.toFixed(2)}
-          </h3>
-          {manual.open_orders.length > 0 && (
-            <div className="mb-3">
-              <p className="text-xs text-slate-500 mb-1">Open ({manual.open_orders.length})</p>
-              <div className="space-y-1">
-                {manual.open_orders.map(o => {
-                  const rr = calcRR(o.entry, o.stop_loss, o.take_profit)
-                  const pct = pnlPercent(o, o.unrealized_pnl)
-                  return (
-                    <div key={o.id} className="flex items-center gap-4 text-xs py-1 border-b border-[#2a2d3e]/50">
-                      <span className={`font-bold w-10 ${o.direction === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>{o.direction}</span>
-                      <span className="text-slate-300">{o.symbol}</span>
-                      <span className="text-slate-500">entry ${o.entry.toFixed(2)}</span>
-                      <span className="text-slate-500">now ${o.current_price.toFixed(2)}</span>
-                      <span className="text-slate-600">{rr !== null ? `1:${rr.toFixed(2)}` : '—'}</span>
-                      <span className={`font-medium ${o.unrealized_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {o.unrealized_pnl >= 0 ? '+' : ''}${o.unrealized_pnl.toFixed(2)} ({pct >= 0 ? '+' : ''}{pct.toFixed(2)}%)
-                      </span>
-                      <span className="ml-auto text-indigo-400 text-xs px-1.5 py-0.5 rounded bg-indigo-500/10">MONITORING</span>
-                    </div>
-                  )
-                })}
+        <div className="card">
+          <header className="flex items-center justify-between flex-wrap gap-2 px-3 pt-3 pb-2">
+            <h3 className="panel-title">Manual Paper Orders</h3>
+            <span className="num text-[11px] text-fg-faint">
+              Equity ${manual.equity.toLocaleString()} · Realized PnL{' '}
+              <span className={pnlCls(manual.realized_pnl)}>${manual.realized_pnl.toFixed(2)}</span>
+            </span>
+          </header>
+          <div className="px-3 pb-3 space-y-3">
+            {manual.open_orders.length > 0 && (
+              <div>
+                <p className="field-label mb-1">Open ({manual.open_orders.length})</p>
+                <table className="w-full text-[12.5px]">
+                  <thead>
+                    <tr>
+                      <th className="th text-left">Dir</th>
+                      <th className="th text-left">Symbol</th>
+                      <th className="th text-right">Entry</th>
+                      <th className="th text-right">Now</th>
+                      <th className="th text-right">R/R</th>
+                      <th className="th text-right">PnL</th>
+                      <th className="th text-right">Status</th>
+                      <th className="th text-right">Close</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {manual.open_orders.map(o => {
+                      const rr = calcRR(o.entry, o.stop_loss, o.take_profit)
+                      const pct = pnlPercent(o, o.unrealized_pnl)
+                      return (
+                        <tr key={o.id} className="row-hover">
+                          <td className={`td font-semibold ${dirCls(o.direction)}`}>{o.direction}</td>
+                          <td className="td text-fg">{o.symbol}</td>
+                          <td className="td num text-right text-fg-soft">${o.entry.toFixed(2)}</td>
+                          <td className="td num text-right text-fg-soft">${o.current_price.toFixed(2)}</td>
+                          <td className="td num text-right text-fg-faint">{rr !== null ? `1:${rr.toFixed(2)}` : '—'}</td>
+                          <td className={`td num text-right font-medium ${pnlCls(o.unrealized_pnl)}`}>
+                            {o.unrealized_pnl >= 0 ? '+' : ''}${o.unrealized_pnl.toFixed(2)} ({pct >= 0 ? '+' : ''}{pct.toFixed(2)}%)
+                          </td>
+                          <td className="td text-right"><span className="chip chip-warn">MONITORING</span></td>
+                          <td className="td text-right">
+                            <button onClick={() => handleCloseOrder(o.id)} disabled={closingId === o.id}
+                              aria-label={`Close order ${o.id} at market price`}
+                              title="Close now at market price"
+                              className="btn btn-danger-outline !h-6 !px-1.5">
+                              <X size={12} aria-hidden />
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
-            </div>
-          )}
-          {manual.closed_orders.length > 0 && (
-            <div>
-              <p className="text-xs text-slate-500 mb-1">Closed ({manual.closed_orders.length})</p>
-              <div className="space-y-1">
-                {[...manual.closed_orders].reverse().slice(0, 10).map(o => {
-                  const pct = pnlPercent(o, o.realized_pnl)
-                  return (
-                    <div key={o.id} className="flex items-center gap-4 text-xs py-1 border-b border-[#2a2d3e]/50">
-                      <span className={`font-bold w-10 ${o.direction === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>{o.direction}</span>
-                      <span className="text-slate-300">{o.symbol}</span>
-                      <span className="text-slate-500">${o.entry.toFixed(2)} → ${(o.exit_price ?? o.current_price).toFixed(2)}</span>
-                      <span className={`font-medium ${o.realized_pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {o.realized_pnl >= 0 ? '+' : ''}${o.realized_pnl.toFixed(2)} ({pct >= 0 ? '+' : ''}{pct.toFixed(2)}%)
-                      </span>
-                      <span className="text-slate-600">{o.exit_reason}</span>
-                      <span className="ml-auto text-slate-700">{o.closed_at ? new Date(o.closed_at).toLocaleTimeString() : ''}</span>
-                    </div>
-                  )
-                })}
+            )}
+            {manual.closed_orders.length > 0 && (
+              <div>
+                <p className="field-label mb-1">Closed ({manual.closed_orders.length})</p>
+                <table className="w-full text-[12.5px]">
+                  <thead>
+                    <tr>
+                      <th className="th text-left">Dir</th>
+                      <th className="th text-left">Symbol</th>
+                      <th className="th text-right">Entry / Exit</th>
+                      <th className="th text-right">PnL</th>
+                      <th className="th text-left">Reason</th>
+                      <th className="th text-right">Closed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...manual.closed_orders].reverse().slice(0, 10).map(o => {
+                      const pct = pnlPercent(o, o.realized_pnl)
+                      return (
+                        <tr key={o.id} className="row-hover">
+                          <td className={`td font-semibold ${dirCls(o.direction)}`}>{o.direction}</td>
+                          <td className="td text-fg">{o.symbol}</td>
+                          <td className="td num text-right text-fg-soft">
+                            <span className="inline-flex items-center gap-1">
+                              ${o.entry.toFixed(2)}
+                              <ArrowRight size={10} aria-label="to" className="text-fg-faint" />
+                              ${(o.exit_price ?? o.current_price).toFixed(2)}
+                            </span>
+                          </td>
+                          <td className={`td num text-right font-medium ${pnlCls(o.realized_pnl)}`}>
+                            {o.realized_pnl >= 0 ? '+' : ''}${o.realized_pnl.toFixed(2)} ({pct >= 0 ? '+' : ''}{pct.toFixed(2)}%)
+                          </td>
+                          <td className="td text-fg-faint">{o.exit_reason}</td>
+                          <td className="td num text-right text-fg-faint">{o.closed_at ? new Date(o.closed_at).toLocaleTimeString() : ''}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
 
       {/* Persisted trade history — durable, survives backend restarts */}
-      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5">
-        <h3 className="text-sm font-semibold text-slate-300 mb-3">
-          Trade History ({persistedTotal} total) — auto-bot + manual, saved to DB
-        </h3>
-        {persistedTrades.length === 0 ? (
-          <p className="text-slate-500 text-sm text-center py-6">
-            No paper trades yet. Use the Manual Trade Entry form above, start the auto-bot, or use "Place Paper Trade" on a signal card (Dashboard / Retail Dashboard).
-          </p>
-        ) : (
-          <div className="space-y-1">
-            {persistedTrades.map(t => (
-              <div key={t.id} className="flex items-center gap-4 text-xs py-1.5 border-b border-[#2a2d3e]/50">
-                <span className={`font-bold w-10 ${t.direction === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>{t.direction}</span>
-                <span className="text-slate-300 w-20">{t.symbol}</span>
-                <span className="text-slate-500 w-24">{t.strategy}</span>
-                <span className="text-slate-500">${t.entry_price.toFixed(2)} → ${t.exit_price.toFixed(2)}</span>
-                <span className={`font-medium ${t.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  {t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(2)} ({t.pnl_percent >= 0 ? '+' : ''}{t.pnl_percent.toFixed(2)}%)
-                </span>
-                <span className="text-slate-600">{t.exit_reason}</span>
-                <span className="ml-auto text-slate-700">{new Date(t.created_at).toLocaleString()}</span>
-              </div>
-            ))}
-          </div>
-        )}
+      <div className="card">
+        <header className="flex items-center justify-between px-3 pt-3 pb-2">
+          <h3 className="panel-title">Trade History</h3>
+          <span className="num text-[11px] text-fg-faint">{persistedTotal} total · auto-bot + manual, saved to DB</span>
+        </header>
+        <div className="px-3 pb-3">
+          {persistedTrades.length === 0 ? (
+            <p className="text-fg-faint text-[12.5px] text-center py-6">
+              No paper trades yet. Use the Manual Trade Entry form above, start the auto-bot, or use "Place Paper Trade" on a signal card (Dashboard / Retail Dashboard).
+            </p>
+          ) : (
+            <table className="w-full text-[12.5px]">
+              <thead>
+                <tr>
+                  <th className="th text-left">Dir</th>
+                  <th className="th text-left">Symbol</th>
+                  <th className="th text-left">Strategy</th>
+                  <th className="th text-right">Entry / Exit</th>
+                  <th className="th text-right">PnL</th>
+                  <th className="th text-left">Reason</th>
+                  <th className="th text-right">Time</th>
+                </tr>
+              </thead>
+              <tbody>
+                {persistedTrades.map(t => (
+                  <tr key={t.id} className="row-hover">
+                    <td className={`td font-semibold ${dirCls(t.direction)}`}>{t.direction}</td>
+                    <td className="td text-fg">{t.symbol}</td>
+                    <td className="td text-fg-faint">{t.strategy}</td>
+                    <td className="td num text-right text-fg-soft">
+                      <span className="inline-flex items-center gap-1">
+                        ${t.entry_price.toFixed(2)}
+                        <ArrowRight size={10} aria-label="to" className="text-fg-faint" />
+                        ${t.exit_price.toFixed(2)}
+                      </span>
+                    </td>
+                    <td className={`td num text-right font-medium ${pnlCls(t.pnl)}`}>
+                      {t.pnl >= 0 ? '+' : ''}${t.pnl.toFixed(2)} ({t.pnl_percent >= 0 ? '+' : ''}{t.pnl_percent.toFixed(2)}%)
+                    </td>
+                    <td className="td text-fg-faint">{t.exit_reason}</td>
+                    <td className="td num text-right text-fg-faint">{new Date(t.created_at).toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
     </div>
   )

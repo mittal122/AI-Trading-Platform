@@ -72,22 +72,22 @@ export default function SymbolSearchInput({ value, onCommit, className }: {
         }}
         onBlur={() => window.setTimeout(() => { if (!boxRef.current?.contains(document.activeElement)) commit(query) }, 120)}
         placeholder="Search symbol…"
-        className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500"
+        className="input input-mono w-full"
       />
       {open && filtered.length > 0 && (
-        <div className="absolute z-20 mt-1 w-full max-h-64 overflow-y-auto bg-[#1a1d27] border border-[#2a2d3e] rounded-lg shadow-lg">
+        <div className="absolute z-20 mt-1 w-full max-h-64 overflow-y-auto bg-surface border border-line rounded-lg shadow-lg">
           {filtered.map((s, i) => (
             <button
               key={s.symbol}
               type="button"
               onMouseDown={e => e.preventDefault()}
               onClick={() => commit(s.symbol)}
-              className={`w-full flex items-center justify-between px-3 py-1.5 text-left text-sm ${
-                i === highlight ? 'bg-indigo-500/20 text-indigo-300' : 'text-slate-300 hover:bg-[#2a2d3e]'
+              className={`w-full flex items-center justify-between px-3 py-1.5 text-left text-[12.5px] cursor-pointer ${
+                i === highlight ? 'bg-accent-soft text-accent' : 'text-fg-soft hover:bg-raised'
               }`}
             >
-              <span className="font-medium">{s.symbol}</span>
-              <span className="text-xs text-slate-600">{s.base_asset}/{s.quote_asset}</span>
+              <span className="num font-medium">{s.symbol}</span>
+              <span className="text-[11px] text-fg-faint">{s.base_asset}/{s.quote_asset}</span>
             </button>
           ))}
         </div>

@@ -9,12 +9,13 @@ from fastapi import APIRouter, HTTPException, Query, status
 
 from backend.app.core.smc_config import smc_config
 from backend.app.schemas.smc import (
-    AcceptSignalRequest, AddWatchRequest, AnalysisRequest, AnalysisResult,
+    AcceptSignalRequest, AddWatchRequest, AnalysisRequest, AnalysisResult, AutoTestStartRequest,
     BacktestRequest, BacktestResult, ScannerSettings, SignalOut, WatchItem,
 )
 from backend.app.services.market_service import MarketService
 from backend.app.services.smc.backtest import run_backtest
 from backend.app.services.smc.order_flow import fetch_order_flow
+from backend.app.services.smc.auto_tester import auto_tester
 from backend.app.services.smc.scanner import scanner_service
 from backend.app.services.smc.smc_engine import analyze
 
@@ -152,3 +153,36 @@ async def smc_dismiss_signal(signal_id: int) -> SignalOut:
         return await scanner_service.dismiss(signal_id)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# --------------------------------------------------------------------------- #
+# Auto-test — hands-free paper-trading loop (re-analyze every candle close,
+# trade the stronger side, flip on reversal)
+# --------------------------------------------------------------------------- #
+
+@router.post("/autotest/start")
+async def smc_autotest_start(req: AutoTestStartRequest) -> dict:
+    if req.interval not in _market.get_supported_intervals():
+        raise HTTPException(status_code=400, detail=f"Unsupported interval '{req.interval}'")
+    if not (0.1 <= req.risk_percent <= 5.0):
+        raise HTTPException(status_code=400, detail="risk_percent must be 0.1-5.0")
+    try:
+        auto_tester.start(req.symbol, req.interval, req.risk_percent,
+                          req.min_score, req.flip_margin)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return auto_tester.status()
+
+
+@router.post("/autotest/stop")
+async def smc_autotest_stop() -> dict:
+    try:
+        auto_tester.stop()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return auto_tester.status()
+
+
+@router.get("/autotest/status")
+async def smc_autotest_status() -> dict:
+    return auto_tester.status()

@@ -121,7 +121,9 @@ export interface PortfolioAnalytics {
   initial_balance: number; ending_balance: number; total_return: number
   total_trades: number; winning_trades: number; losing_trades: number
   win_rate: number; avg_win: number; avg_loss: number
-  profit_factor: number; expectancy: number
+  // Backend computes float('inf') when there are no losing trades; JSON
+  // cannot carry Infinity, so it arrives as null.
+  profit_factor: number | null; expectancy: number
   sharpe_ratio: number; sortino_ratio: number; calmar_ratio: number
   max_drawdown: number
 }
@@ -143,7 +145,7 @@ export interface BacktestRunItem {
   id: number; strategy: string; symbol: string; interval: string
   limit: number; initial_balance: number; final_balance: number
   total_return: number; total_trades: number; win_rate: number
-  profit_factor: number; sharpe_ratio: number; max_drawdown: number
+  profit_factor: number | null; sharpe_ratio: number; max_drawdown: number
   winning_trades: number; losing_trades: number; avg_win: number
   avg_loss: number; expectancy: number; sortino_ratio: number
   calmar_ratio: number; created_at: string
@@ -339,6 +341,11 @@ export const getPortfolioAnalytics = (
     params: { strategy, symbol, interval, limit }
   })
 
+// Analytics from the REAL recorded trades in the DB (what actually happened),
+// not a simulated backtest run. mode omitted = PAPER + LIVE only.
+export const getHistoryAnalytics = (params: { mode?: string; strategy?: string; symbol?: string }) =>
+  api.get<PortfolioAnalytics>('/portfolio/analytics/history', { params })
+
 export const getTradeHistory = (params: {
   symbol?: string; strategy?: string; mode?: string
   limit?: number; offset?: number
@@ -385,6 +392,9 @@ export const placePaperOrder = (body: {
   symbol: string; strategy: string; direction: string
   entry: number; stop_loss: number; take_profit: number; interval?: string; risk_percent?: number
 }) => api.post<ManualOrder>('/paper/order', body)
+
+export const closeManualOrder = (id: number) =>
+  api.post<ManualOrder>(`/paper/orders/${id}/close`)
 
 export const getManualOrders = () =>
   api.get<ManualPaperStatus>('/paper/orders')
@@ -471,6 +481,26 @@ export interface SmcAnalysis {
   reasons: string[]
   annotations?: ChartAnnotations
 }
+
+// ── SMC Auto-Test — hands-free paper-trading loop ──
+export interface AutoTestEvent {
+  time: string; action: string; detail: string
+  long_score?: number | null; short_score?: number | null
+}
+export interface AutoTestStatus {
+  running: boolean; symbol: string; interval: string
+  risk_percent: number; min_score: number; flip_margin: number
+  started_at: string | null
+  current_side: string | null; current_order: ManualOrder | null
+  last_analysis: { candle_time: string; primary: string; long_score: number; short_score: number } | null
+  events: AutoTestEvent[]
+  stats: { trades: number; wins: number; net_pnl: number }
+}
+export const startAutoTest = (body: {
+  symbol: string; interval: string; risk_percent: number; min_score: number; flip_margin: number
+}) => api.post<AutoTestStatus>('/smc/autotest/start', body)
+export const stopAutoTest = () => api.post<AutoTestStatus>('/smc/autotest/stop')
+export const getAutoTestStatus = () => api.get<AutoTestStatus>('/smc/autotest/status')
 
 export const getSmcAnalysis = (symbol: string, interval: string, limit = 500) =>
   api.get<SmcAnalysis>(`/smc/analyze/${symbol}/${interval}`, { params: { limit } })

@@ -2,21 +2,22 @@ import type { PortfolioAnalytics } from '../api/client'
 
 function Metric({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div className="bg-[#0f1117] rounded-lg p-4">
-      <p className="text-xs text-slate-500 mb-1">{label}</p>
-      <p className="text-lg font-semibold text-white">{value}</p>
-      {sub && <p className="text-xs text-slate-600 mt-0.5">{sub}</p>}
+    <div className="card px-3 py-2.5">
+      <p className="panel-title mb-1">{label}</p>
+      <p className="num text-[15px] font-semibold leading-tight text-fg">{value}</p>
+      {sub && <p className="num text-[10.5px] text-fg-faint mt-0.5">{sub}</p>}
     </div>
   )
 }
 
 export default function PortfolioSummary({ data }: { data: PortfolioAnalytics }) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Metric label="Total Return" value={`${data.total_return >= 0 ? '+' : ''}${data.total_return.toFixed(2)}%`} sub={`$${data.initial_balance.toLocaleString()} → $${data.ending_balance.toLocaleString()}`} />
         <Metric label="Win Rate" value={`${data.win_rate.toFixed(1)}%`} sub={`${data.winning_trades}W / ${data.losing_trades}L`} />
-        <Metric label="Profit Factor" value={data.profit_factor === Infinity ? '∞' : data.profit_factor.toFixed(2)} />
+        {/* null = backend's float('inf') (no losing trades) — JSON drops Infinity */}
+        <Metric label="Profit Factor" value={data.profit_factor == null ? 'inf' : data.profit_factor.toFixed(2)} />
         <Metric label="Max Drawdown" value={`${data.max_drawdown.toFixed(2)}%`} />
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

@@ -1,12 +1,10 @@
 import { useState } from 'react'
+import { Check, Dot, X, Zap } from 'lucide-react'
 import { placePaperOrder } from '../../api/client'
 import type { SmcTradePlan } from '../../api/client'
 
-const STRENGTH_STYLE: Record<string, string> = {
-  STRONG: 'text-green-400 bg-green-500/10 border-green-500/40',
-  MODERATE: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30',
-  WEAK: 'text-slate-400 bg-slate-500/10 border-slate-500/30',
-  REJECTED: 'text-red-400 bg-red-500/10 border-red-500/40',
+const STRENGTH_CHIP: Record<string, string> = {
+  STRONG: 'chip-up', MODERATE: 'chip-warn', WEAK: 'chip-muted', REJECTED: 'chip-down',
 }
 const FACTOR_LABEL: Record<string, string> = {
   order_block_in_zone: 'Order block at entry',
@@ -25,9 +23,9 @@ function fmt(n: number) {
 
 function Level({ label, value, color }: { label: string; value: number; color: string }) {
   return (
-    <div className="bg-[#0f1117] rounded-lg p-2.5">
-      <p className="text-[10px] uppercase tracking-wide text-slate-600">{label}</p>
-      <p className={`text-sm font-semibold ${color}`}>{fmt(value)}</p>
+    <div className="bg-raised border border-line rounded-md p-2.5">
+      <p className="field-label">{label}</p>
+      <p className={`num text-sm font-semibold ${color}`}>{fmt(value)}</p>
     </div>
   )
 }
@@ -36,7 +34,7 @@ export default function SmcTradePlanCard({ plan, symbol, interval }: {
   plan: SmcTradePlan; symbol?: string; interval?: string
 }) {
   const isLong = plan.side === 'long'
-  const sideColor = isLong ? 'text-green-400' : 'text-red-400'
+  const sideColor = isLong ? 'text-up' : 'text-down'
   const conf = plan.confluence
   const [placing, setPlacing] = useState(false)
   const [placed, setPlaced] = useState<string | null>(null)
@@ -59,47 +57,51 @@ export default function SmcTradePlanCard({ plan, symbol, interval }: {
   }
 
   return (
-    <div className={`bg-[#1a1d27] border rounded-xl p-4 ${
-      plan.fired ? (isLong ? 'border-green-500/40' : 'border-red-500/40') : 'border-[#2a2d3e]'}`}>
+    <div className={`card p-4 ${plan.fired ? (isLong ? '!border-up/40' : '!border-down/40') : ''}`}>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className={`text-sm font-bold uppercase ${sideColor}`}>{plan.side}</span>
-          <span className="text-xs text-slate-600">from {plan.source.replace('_', ' ')}</span>
+          <span className="text-[11px] text-fg-faint">from {plan.source.replace('_', ' ')}</span>
         </div>
-        <span className={`text-xs font-bold px-2 py-1 rounded-lg border ${STRENGTH_STYLE[plan.strength]}`}>
-          {plan.fired ? '● FIRED' : plan.strength} · {plan.strength_score}/110
+        <span className={`chip ${STRENGTH_CHIP[plan.strength]}`}>
+          {plan.fired && <Zap size={10} aria-label="fired" />}
+          {plan.fired ? 'FIRED' : plan.strength} · <span className="num">{plan.strength_score}/110</span>
         </span>
       </div>
 
       <div className="grid grid-cols-4 gap-2">
-        <Level label="Entry" value={plan.entry} color="text-white" />
-        <Level label="Stop" value={plan.stop_loss} color="text-red-400" />
-        <Level label="TP1" value={plan.take_profit_1} color="text-green-400" />
-        <Level label="TP2" value={plan.take_profit_2} color="text-green-400" />
+        <Level label="Entry" value={plan.entry} color="text-fg" />
+        <Level label="Stop" value={plan.stop_loss} color="text-down" />
+        <Level label="TP1" value={plan.take_profit_1} color="text-up" />
+        <Level label="TP2" value={plan.take_profit_2} color="text-up" />
       </div>
-      <p className="mt-2 text-xs text-slate-500">
-        Reward:risk <span className="text-slate-300 font-medium">{plan.risk_reward.toFixed(2)}:1</span>
-        <span className="text-slate-600"> · {plan.note}</span>
+      <p className="mt-2 text-xs text-fg-faint">
+        Reward:risk <span className="num text-fg-soft font-medium">{plan.risk_reward.toFixed(2)}:1</span>
+        <span> · {plan.note}</span>
       </p>
 
       {conf && (
-        <div className="mt-3 border-t border-[#2a2d3e] pt-3">
-          <p className="text-[10px] uppercase tracking-wide text-slate-600 mb-2">Confluence</p>
+        <div className="mt-3 border-t border-line pt-3">
+          <p className="field-label mb-2">Confluence</p>
           <div className="grid grid-cols-2 gap-x-3 gap-y-1">
             {conf.factors.map(f => (
               <div key={f.name} className="flex items-center gap-1.5 text-xs">
-                <span className={f.hit ? 'text-green-400' : 'text-slate-700'}>{f.hit ? '✓' : '·'}</span>
-                <span className={f.hit ? 'text-slate-300' : 'text-slate-600'}>
+                {f.hit
+                  ? <Check size={12} className="text-up shrink-0" aria-label="met" />
+                  : <Dot size={12} className="text-fg-faint shrink-0" aria-label="not met" />}
+                <span className={f.hit ? 'text-fg-soft' : 'text-fg-faint'}>
                   {FACTOR_LABEL[f.name] ?? f.name}
                 </span>
-                <span className="text-slate-700 ml-auto">+{f.points}</span>
+                <span className="num text-fg-faint ml-auto">+{f.points}</span>
               </div>
             ))}
           </div>
           {conf.reject_reasons.length > 0 && (
             <div className="mt-2 space-y-1">
               {conf.reject_reasons.map((r, i) => (
-                <p key={i} className="text-xs text-red-400/80">✕ {r}</p>
+                <p key={i} className="text-xs text-down/80 flex items-center gap-1">
+                  <X size={11} className="shrink-0" aria-label="rejected" /> {r}
+                </p>
               ))}
             </div>
           )}
@@ -109,11 +111,10 @@ export default function SmcTradePlanCard({ plan, symbol, interval }: {
       {symbol && (
         <div className="mt-3 flex items-center gap-3">
           <button onClick={paperTrade} disabled={placing}
-            className={`px-3 py-1.5 text-xs font-medium rounded-lg disabled:opacity-50 ${
-              isLong ? 'bg-green-600/80 hover:bg-green-600' : 'bg-red-600/80 hover:bg-red-600'} text-white`}>
+            className={`btn !h-7 !text-xs ${isLong ? 'btn-buy' : 'btn-sell'}`}>
             {placing ? 'Placing…' : 'Paper-trade this plan'}
           </button>
-          {placed && <span className="text-xs text-slate-400">{placed}</span>}
+          {placed && <span className="text-xs text-fg-soft">{placed}</span>}
         </div>
       )}
     </div>
