@@ -2,22 +2,22 @@ import type { Indicators } from '../api/client'
 
 function Row({ label, value, color }: { label: string; value: string; color?: string }) {
   return (
-    <div className="flex items-center justify-between py-1.5 border-b border-[#2a2d3e]/50 last:border-0">
-      <span className="text-xs text-slate-500">{label}</span>
-      <span className={`text-xs font-mono font-semibold ${color ?? 'text-white'}`}>{value}</span>
+    <div className="flex items-center justify-between py-1.5 border-b border-line/50 last:border-0">
+      <span className="text-xs text-fg-faint">{label}</span>
+      <span className={`num text-xs font-semibold ${color ?? 'text-fg'}`}>{value}</span>
     </div>
   )
 }
 
 export default function IndicatorPanel({ ind, symbol }: { ind: Indicators; symbol: string }) {
-  const rsiColor = ind.rsi14 > 70 ? 'text-red-400' : ind.rsi14 < 30 ? 'text-green-400' : 'text-white'
-  const macdColor = ind.histogram >= 0 ? 'text-green-400' : 'text-red-400'
-  const priceVsBB = ind.price > ind.bb_upper ? 'text-red-400' :
-                    ind.price < ind.bb_lower ? 'text-green-400' : 'text-white'
+  const rsiColor = ind.rsi14 > 70 ? 'text-down' : ind.rsi14 < 30 ? 'text-up' : 'text-fg'
+  const macdColor = ind.histogram >= 0 ? 'text-up' : 'text-down'
+  const priceVsBB = ind.price > ind.bb_upper ? 'text-down' :
+                    ind.price < ind.bb_lower ? 'text-up' : 'text-fg'
 
   return (
-    <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-4">
-      <h3 className="text-xs font-semibold text-slate-400 mb-3 uppercase tracking-wider">
+    <div className="card px-3 py-2.5">
+      <h3 className="panel-title mb-2">
         Indicators · {symbol}
       </h3>
       <Row label="Price"      value={`$${ind.price.toFixed(2)}`} color={priceVsBB} />

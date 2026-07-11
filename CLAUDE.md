@@ -1861,6 +1861,34 @@ happening so they can plan trades off one panel. Two-mode card on the Dashboard:
   (top-300 ~1.9s); headless Chrome both modes (RIF 30.7×→score 17.59 top),
   0 console errors, `tsc --noEmit` clean.
 
+### UI redesign — "Obsidian Terminal" (2026-07-11, branch `ui-ux-redesign`)
+
+Full frontend visual restructure on its own branch (user wants to merge
+manually when satisfied — do NOT merge to master unprompted). Backend
+untouched. Built with the ui-ux-pro-max skill's generated design system
+(gold/amber accent "Modern Dark" for fintech terminals, density 9/10).
+
+- **Design system**: `design-system/STYLE_GUIDE.md` (agent-facing rules) +
+  Tailwind v4 `@theme` tokens in `frontend/src/index.css` — surfaces
+  `bg/surface/raised/line`, text `fg/fg-soft/fg-faint`, brand `accent`
+  (#f5a623 amber), market `up`(#2ebd85)/`down`(#f6465d) reserved strictly
+  for direction. Component classes: `.card .panel-title .num .btn*
+  .input .th .td .row-hover .chip*`. Fonts self-hosted via @fontsource
+  (Inter Variable UI + JetBrains Mono Variable for ALL numerals,
+  tabular). Icons: lucide-react only — zero emojis/unicode glyphs.
+- **New shell**: `components/shell/TopBar.tsx` (brand, scrolling market
+  tape from /market/overview, backend status dot, UTC clock) +
+  `NavRail.tsx` (56px icon rail). Old `Sidebar.tsx` deleted.
+- **Main page**: `pages/Terminal.tsx` REPLACES `pages/Dashboard.tsx`
+  (deleted) at `/`. Same data logic (all polls/pagination/NaN-guard kept
+  byte-identical), new dense 3-column layout (watchlist | chart+order-flow
+  | signal+movers), interval switcher added (was hardcoded 5m; persisted
+  as `terminal.interval`).
+- All other pages + components reskinned in place (same routes, same
+  props/data logic).
+- New frontend deps: `lucide-react`, `@fontsource-variable/inter`,
+  `@fontsource-variable/jetbrains-mono`.
+
 ---
 
 ## Immediate Next Task

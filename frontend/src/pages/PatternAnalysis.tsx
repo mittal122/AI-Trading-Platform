@@ -7,6 +7,10 @@ import type {
   IChartApi, ISeriesApi, IPriceLine, ISeriesMarkersPluginApi, LogicalRange, Time, UTCTimestamp,
 } from 'lightweight-charts'
 import {
+  Check, Clock, X, Eye, EyeOff, Crosshair, Maximize2, Minimize2,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
+import {
   getMarket, getLiveMarket, scanPatterns, explainPattern, scanAnalysisTools, explainAnalysisTools,
 } from '../api/client'
 import type {
@@ -45,16 +49,16 @@ const PATTERN_CLICK_DELAY_MS = 220
 const LIVE_POLL_MS = 5000
 
 const DIR_DOT: Record<string, string> = {
-  BULLISH: 'bg-green-400', BEARISH: 'bg-red-400', NEUTRAL: 'bg-slate-400',
+  BULLISH: 'bg-up', BEARISH: 'bg-down', NEUTRAL: 'bg-fg-faint',
 }
 
 // Beginner-readable status wording — CONFIRMED means "the pattern triggered
 // (price actually broke out afterwards)", DEVELOPING means "still open at
 // the live edge", BROKEN means "failed or expired without triggering".
-const STATUS_CHIP: Record<string, { label: string; cls: string }> = {
-  CONFIRMED:  { label: '✓ Confirmed', cls: 'text-green-400 bg-green-500/10 border-green-500/30' },
-  DEVELOPING: { label: '… Forming',   cls: 'text-yellow-400 bg-yellow-500/10 border-yellow-500/30' },
-  BROKEN:     { label: '✕ Failed',    cls: 'text-red-400/80 bg-red-500/10 border-red-500/30' },
+const STATUS_CHIP: Record<string, { label: string; cls: string; Icon: LucideIcon }> = {
+  CONFIRMED:  { label: 'Confirmed', cls: 'chip-up', Icon: Check },
+  DEVELOPING: { label: 'Forming',   cls: 'chip-warn', Icon: Clock },
+  BROKEN:     { label: 'Failed',    cls: 'chip-muted', Icon: X },
 }
 
 const TOOL_LINE_COLORS: Record<string, string> = {
@@ -295,10 +299,14 @@ export default function PatternAnalysis() {
   useEffect(() => {
     if (!chartRef.current) return
     const chart = createChart(chartRef.current, {
-      layout: { background: { type: ColorType.Solid, color: '#0f1117' }, textColor: '#64748b' },
-      grid: { vertLines: { color: '#1a1d27' }, horzLines: { color: '#1a1d27' } },
-      timeScale: { borderColor: '#2a2d3e' },
-      rightPriceScale: { borderColor: '#2a2d3e' },
+      layout: { background: { type: ColorType.Solid, color: '#11141b' }, textColor: '#5c6475' },
+      grid: { vertLines: { color: '#1a1f2b' }, horzLines: { color: '#1a1f2b' } },
+      timeScale: { borderColor: '#232837' },
+      rightPriceScale: { borderColor: '#232837' },
+      crosshair: {
+        vertLine: { color: '#3d465c', labelBackgroundColor: '#303748' },
+        horzLine: { color: '#3d465c', labelBackgroundColor: '#303748' },
+      },
       // Free zooming everywhere (wheel/pinch/drag on either axis). Getting
       // "lost" is always one action from recovery: double-click either axis
       // resets it (axisDoubleClickReset), the Reset view button restores
@@ -316,9 +324,9 @@ export default function PatternAnalysis() {
       height: 420,
     })
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#22c55e', downColor: '#ef4444',
-      borderUpColor: '#22c55e', borderDownColor: '#ef4444',
-      wickUpColor: '#22c55e', wickDownColor: '#ef4444',
+      upColor: '#2ebd85', downColor: '#f6465d',
+      borderUpColor: '#2ebd85', borderDownColor: '#f6465d',
+      wickUpColor: '#2ebd85', wickDownColor: '#f6465d',
       // Price can never be negative — clamp autoScale's padded range at 0
       // (matters for low-priced altcoins, where default padding can dip
       // below zero).
@@ -636,45 +644,38 @@ export default function PatternAnalysis() {
   }
 
   return (
-    <div className="p-6 space-y-4">
-      {/* Header — identity + primary controls, kept slim so the chart below is the first big thing on screen */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-white flex items-center gap-2">
-            Retail Dashboard
-            <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-green-400 bg-green-500/10 border border-green-500/30 rounded-full px-2 py-0.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" /> LIVE
-            </span>
-          </h1>
-          <p className="text-slate-500 text-sm">Chart patterns, FVGs, Smart Money structure, analysis tools, and signals — AI-explained</p>
-        </div>
+    <div className="p-3 space-y-3 max-w-[1800px] mx-auto">
+      {/* Toolbar — primary controls, kept slim so the chart below is the first big thing on screen */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <span className="chip chip-warn">
+          <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" /> LIVE
+        </span>
         <div className="flex items-center gap-2">
           <SymbolSearchInput value={symbolInput} onCommit={s => { setSymbolInput(s); setSymbol(s) }} className="w-40" />
           <select value={interval} onChange={e => setInterval(e.target.value)}
-            className="bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none">
+            className="input w-20 cursor-pointer">
             {INTERVALS.map(i => <option key={i}>{i}</option>)}
           </select>
-          <button onClick={runScan} disabled={loading}
-            className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg">
+          <button onClick={runScan} disabled={loading} className="btn btn-primary">
             {loading ? 'Scanning…' : 'Rescan'}
           </button>
         </div>
       </div>
 
-      {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm">{error}</div>}
+      {error && <div className="card card-pad border-down/40 text-down text-sm">{error}</div>}
 
       {/* Priority layout: the chart is the single dominant element (left,
           widest column); everything secondary (patterns, tools, AI) lives in
           a narrower sticky sidebar so it never outweighs the chart, and is
           tabbed rather than stacked so the page doesn't turn into a long
           scroll of equally-weighted sections. */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-4 items-start">
-        <div className="space-y-4 min-w-0">
-          <div ref={chartWrapperRef} className={`bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-4 ${isFullscreen ? 'flex flex-col' : ''}`}>
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-3 items-start">
+        <div className="space-y-3 min-w-0">
+          <div ref={chartWrapperRef} className={`card card-pad ${isFullscreen ? 'flex flex-col bg-surface' : ''}`}>
             <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-              <p className="text-xs text-slate-500">{symbol} · {interval} — click a pattern once to hide it, double-click to view details</p>
+              <p className="text-[11px] text-fg-faint"><span className="num">{symbol} · {interval}</span> — click a pattern once to hide it, double-click to view details</p>
               <div className="flex items-center gap-3">
-                <p className="text-xs text-slate-600">
+                <p className="num text-[10.5px] text-fg-faint">
                   {loadedCount.toLocaleString()} candles loaded
                   {loadingOlder ? ' · loading older…' : historyExhausted ? ' · full history loaded' : ' · scroll left for more'}
                   {' · analyzing ' + scanLimit.toLocaleString()}
@@ -682,37 +683,39 @@ export default function PatternAnalysis() {
                 </p>
                 <button onClick={resetChartView}
                   title="Snap back to the latest candles with an auto-fitted price axis (also: double-click either chart axis)"
-                  className="text-xs px-2 py-1 bg-[#0f1117] border border-[#2a2d3e] rounded-lg text-slate-400 hover:text-white hover:border-indigo-500/40">
-                  ⌖ Reset view
+                  aria-label="Reset chart view"
+                  className="btn h-6 !px-2 text-[11px]">
+                  <Crosshair size={12} /> Reset view
                 </button>
                 <button onClick={toggleFullscreen}
                   title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
-                  className="text-xs px-2 py-1 bg-[#0f1117] border border-[#2a2d3e] rounded-lg text-slate-400 hover:text-white hover:border-indigo-500/40">
-                  {isFullscreen ? '⤡ Exit Fullscreen' : '⤢ Fullscreen'}
+                  aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+                  className="btn h-6 !px-2 text-[11px]">
+                  {isFullscreen ? <><Minimize2 size={12} /> Exit Fullscreen</> : <><Maximize2 size={12} /> Fullscreen</>}
                 </button>
               </div>
             </div>
             <div ref={chartRef} className={isFullscreen ? 'flex-1' : ''} />
           </div>
 
-          <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-3">
+          <div className="card p-3">
             <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-              <p className="text-xs text-slate-500">Analysis tools — toggle individually, each with its own (ⓘ) documentation</p>
+              <p className="text-[11px] text-fg-faint">Analysis tools — toggle individually, each with its own info panel</p>
               {enabledTools.length > 0 && (
                 toolsLoading ? (
-                  <span className="text-xs text-amber-400 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" /> Scanning…
+                  <span className="text-[11px] text-accent flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" /> Scanning…
                   </span>
                 ) : toolsLastUpdated ? (
-                  <span className="text-xs text-green-400 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-400" /> Live — updated {new Date(toolsLastUpdated).toLocaleTimeString()}
+                  <span className="text-[11px] text-up flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-up" /> Live — updated <span className="num">{new Date(toolsLastUpdated).toLocaleTimeString()}</span>
                   </span>
                 ) : null
               )}
             </div>
             {toolsLoading && (
-              <div className="relative h-1 w-full bg-[#0f1117] rounded-full overflow-hidden mb-2">
-                <div className="tool-scan-bar absolute inset-y-0 w-1/3 bg-indigo-500 rounded-full" />
+              <div className="relative h-1 w-full bg-bg rounded-full overflow-hidden mb-2">
+                <div className="tool-scan-bar absolute inset-y-0 w-1/3 bg-accent rounded-full" />
               </div>
             )}
             <ToolToggleBar enabled={enabledSet} onToggle={toggleTool} loading={toolsLoading} readyKeys={toolResultKeys} />
@@ -724,38 +727,38 @@ export default function PatternAnalysis() {
         </div>
 
         <div className="space-y-3 xl:sticky xl:top-6">
-          <div className="flex gap-1 bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-1">
+          <div className="flex gap-1 card p-1">
             <button onClick={() => setSidebarTab('patterns')}
-              className={`flex-1 text-xs font-semibold py-2 rounded-lg transition-colors ${
-                sidebarTab === 'patterns' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+              className={`flex-1 text-xs font-semibold py-2 rounded-md transition-colors cursor-pointer ${
+                sidebarTab === 'patterns' ? 'bg-accent-soft text-accent' : 'text-fg-faint hover:text-fg'
               }`}>
-              Patterns ({filteredPatterns.length})
+              Patterns (<span className="num">{filteredPatterns.length}</span>)
             </button>
             <button onClick={() => setSidebarTab('tools')}
-              className={`flex-1 text-xs font-semibold py-2 rounded-lg transition-colors ${
-                sidebarTab === 'tools' ? 'bg-indigo-600 text-white' : 'text-slate-400 hover:text-white'
+              className={`flex-1 text-xs font-semibold py-2 rounded-md transition-colors cursor-pointer ${
+                sidebarTab === 'tools' ? 'bg-accent-soft text-accent' : 'text-fg-faint hover:text-fg'
               }`}>
               Tools & AI{enabledTools.length > 0 ? ` (${enabledTools.length})` : ''}
             </button>
           </div>
 
           {sidebarTab === 'patterns' ? (
-            <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-4">
+            <div className="card card-pad">
               <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
-                <h2 className="text-sm font-semibold text-slate-300">
+                <h2 className="panel-title">
                   Detected Patterns
-                  {hiddenPatternIds.size > 0 && <span className="text-slate-600"> · {hiddenPatternIds.size} hidden</span>}
+                  {hiddenPatternIds.size > 0 && <span className="text-fg-faint normal-case"> · {hiddenPatternIds.size} hidden</span>}
                 </h2>
                 <div className="flex items-center gap-3">
                   {hiddenPatternIds.size < filteredPatterns.length && filteredPatterns.length > 0 && (
                     <button onClick={() => setHiddenPatternIds(new Set(filteredPatterns.map(p => p.id)))}
-                      className="text-xs text-indigo-400 hover:text-indigo-300">
+                      className="text-xs text-accent hover:underline cursor-pointer">
                       Hide all
                     </button>
                   )}
                   {hiddenPatternIds.size > 0 && (
                     <button onClick={() => setHiddenPatternIds(new Set())}
-                      className="text-xs text-indigo-400 hover:text-indigo-300">
+                      className="text-xs text-accent hover:underline cursor-pointer">
                       Show all
                     </button>
                   )}
@@ -765,26 +768,23 @@ export default function PatternAnalysis() {
               {/* Quality filters — what counts as worth showing */}
               <div className="flex items-center gap-3 mb-3 flex-wrap">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-slate-500">Min conf.</span>
+                  <span className="text-[11px] text-fg-faint">Min conf.</span>
                   <input type="range" min={55} max={90} step={5} value={minConfidence}
-                    onChange={e => setMinConfidence(Number(e.target.value))} className="w-20" />
-                  <span className="text-[11px] text-slate-400 w-7">{minConfidence}%</span>
+                    onChange={e => setMinConfidence(Number(e.target.value))}
+                    className="w-20 accent-accent cursor-pointer" />
+                  <span className="num text-[11px] text-fg-soft w-7">{minConfidence}%</span>
                 </div>
                 <button onClick={() => setShowBroken(!showBroken)}
-                  className={`text-[11px] px-2 py-0.5 rounded-full border transition-colors ${
-                    showBroken
-                      ? 'bg-red-500/10 text-red-400 border-red-500/30'
-                      : 'bg-[#0f1117] text-slate-500 border-[#2a2d3e]'
-                  }`}>
+                  className={`chip cursor-pointer transition-colors ${showBroken ? 'chip-down' : 'chip-muted'}`}>
                   {showBroken ? 'Failed shown' : 'Failed hidden'}
                 </button>
-                <span className="text-[11px] text-slate-600">
+                <span className="num text-[11px] text-fg-faint">
                   {filteredPatterns.length} of {patterns.length}
                 </span>
               </div>
 
               {filteredPatterns.length === 0 ? (
-                <p className="text-slate-500 text-sm text-center py-6">
+                <p className="text-fg-faint text-sm text-center py-6">
                   {loading ? 'Scanning…'
                     : patterns.length > 0 ? 'No patterns pass the current filters — lower Min conf. to see weaker matches.'
                     : 'No patterns detected on this timeframe right now.'}
@@ -801,7 +801,7 @@ export default function PatternAnalysis() {
                     return (
                       <div key={p.id}>
                       {groupHeader && (
-                        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500 pt-2 pb-1 px-2">
+                        <p className="panel-title pt-2 pb-1 px-2">
                           {groupHeader}
                         </p>
                       )}
@@ -809,27 +809,34 @@ export default function PatternAnalysis() {
                         onClick={() => handlePatternRowClick(p.id)}
                         onDoubleClick={() => handlePatternRowDoubleClick(p.id)}
                         title="Click to hide/show · double-click for details"
-                        className={`w-full flex items-center gap-1 rounded-lg text-sm transition-colors cursor-pointer select-none ${
-                          p.id === selectedId ? 'bg-indigo-500/20 border border-indigo-500/30' : 'hover:bg-[#0f1117] border border-transparent'
+                        className={`row-hover w-full flex items-center gap-1 rounded-md text-sm transition-colors cursor-pointer select-none ${
+                          p.id === selectedId ? 'bg-accent-soft border border-accent/40' : 'border border-transparent'
                         }`}>
-                        <span className={`px-2 py-2 shrink-0 ${hidden ? 'text-slate-600' : 'text-indigo-400'}`}>
-                          {hidden ? '🙈' : '👁'}
+                        <span className={`px-2 py-2 shrink-0 ${hidden ? 'text-fg-faint' : 'text-accent'}`}
+                          aria-label={hidden ? 'Hidden on chart' : 'Visible on chart'}>
+                          {hidden ? <EyeOff size={13} /> : <Eye size={13} />}
                         </span>
-                        <span className={`flex-1 text-left py-2 pr-3 flex items-center justify-between gap-2 ${hidden ? 'opacity-40' : ''}`}>
+                        <span className={`flex-1 text-left py-1.5 pr-3 flex items-center justify-between gap-2 ${hidden ? 'opacity-40' : ''}`}>
                           <span className="flex items-center gap-2 min-w-0">
                             <span className={`w-2 h-2 rounded-full shrink-0 ${DIR_DOT[p.direction]}`} />
-                            <span className="text-white truncate">{p.pattern_name}</span>
+                            <span className="text-[12.5px] text-fg truncate">{p.pattern_name}</span>
                             {p.id === topPatternId && (
-                              <span className="shrink-0 text-[9px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-full px-1.5 py-0.5">
+                              <span className="chip chip-warn shrink-0 !h-4 !px-1.5 !text-[9px]">
                                 TOP
                               </span>
                             )}
                           </span>
                           <span className="flex items-center gap-2 shrink-0">
-                            <span className={`text-[9px] font-semibold border rounded-full px-1.5 py-0.5 ${STATUS_CHIP[p.status]?.cls ?? ''}`}>
-                              {STATUS_CHIP[p.status]?.label ?? p.status}
-                            </span>
-                            <span className="text-xs text-slate-500">{p.confidence.toFixed(0)}%</span>
+                            {(() => {
+                              const chip = STATUS_CHIP[p.status]
+                              return (
+                                <span className={`chip !h-4 !px-1.5 !text-[9px] ${chip?.cls ?? 'chip-muted'}`}>
+                                  {chip && <chip.Icon size={9} />}
+                                  {chip?.label ?? p.status}
+                                </span>
+                              )
+                            })()}
+                            <span className="num text-[11px] text-fg-faint">{p.confidence.toFixed(0)}%</span>
                           </span>
                         </span>
                       </div>
@@ -842,52 +849,52 @@ export default function PatternAnalysis() {
           ) : (
             <div className="space-y-3">
               {enabledTools.length === 0 ? (
-                <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-6 text-center text-slate-500 text-sm">
+                <div className="card p-6 text-center text-fg-faint text-sm">
                   Toggle an analysis tool below the chart to see its results here.
                 </div>
               ) : (
-                <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-4 space-y-3">
+                <div className="card card-pad space-y-3">
                   <div className="flex items-center justify-between flex-wrap gap-2">
-                    <h2 className="text-sm font-semibold text-slate-300">Tool Results</h2>
+                    <h2 className="panel-title">Tool Results</h2>
                     <button onClick={runAiExplain} disabled={aiLoading}
-                      className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-xs font-medium rounded-lg">
+                      className="btn btn-primary h-7 text-xs">
                       {aiLoading ? 'Analyzing…' : 'AI Confluence'}
                     </button>
                   </div>
                   <div className="grid grid-cols-1 gap-2">
                     {toolResults.map(t => (
-                      <div key={t.tool_key} className="bg-[#0f1117] rounded-lg p-3">
+                      <div key={t.tool_key} className="bg-bg border border-line rounded-md p-3">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-medium text-white">{t.tool_name}</span>
-                          <span className="text-xs font-bold flex items-center gap-1">
+                          <span className="text-[12.5px] font-medium text-fg">{t.tool_name}</span>
+                          <span className="text-[11px] font-semibold text-fg-soft flex items-center gap-1">
                             <span className={`w-1.5 h-1.5 rounded-full ${DIR_DOT[t.bias]}`} />
                             {t.bias}
                           </span>
                         </div>
-                        <p className="text-xs text-slate-500">{t.error ? `Error: ${t.error}` : t.summary}</p>
+                        <p className="text-[11px] text-fg-faint">{t.error ? `Error: ${t.error}` : t.summary}</p>
                       </div>
                     ))}
                   </div>
 
-                  {aiError && <p className="text-xs text-red-400">{aiError}</p>}
+                  {aiError && <p className="text-xs text-down">{aiError}</p>}
                   {aiExplanation && !aiExplanation.error && (
-                    <div className="border-t border-[#2a2d3e] pt-3 space-y-2">
+                    <div className="border-t border-line pt-3 space-y-2">
                       <div className="flex items-center gap-3 flex-wrap">
-                        <span className="text-sm font-bold text-indigo-300">{aiExplanation.market_bias ?? 'N/A'}</span>
+                        <span className="text-sm font-semibold text-accent">{aiExplanation.market_bias ?? 'N/A'}</span>
                         {aiExplanation.confidence_score !== undefined && (
-                          <span className="text-xs text-slate-500">Confidence: {aiExplanation.confidence_score.toFixed(0)}%</span>
+                          <span className="text-[11px] text-fg-faint">Confidence: <span className="num">{aiExplanation.confidence_score.toFixed(0)}%</span></span>
                         )}
                         {aiExplanation.probability_of_success !== undefined && (
-                          <span className="text-xs text-slate-500">Probability: {aiExplanation.probability_of_success?.toFixed(0)}%</span>
+                          <span className="text-[11px] text-fg-faint">Probability: <span className="num">{aiExplanation.probability_of_success?.toFixed(0)}%</span></span>
                         )}
                       </div>
-                      <p className="text-xs text-slate-400">{aiExplanation.reasoning}</p>
-                      <p className="text-xs text-slate-400"><span className="text-slate-500 font-medium">Confluence: </span>{aiExplanation.confluence_notes}</p>
-                      <p className="text-xs text-slate-400"><span className="text-slate-500 font-medium">Risk: </span>{aiExplanation.risk_analysis}</p>
-                      <div className="flex flex-col gap-1 text-xs text-slate-400">
-                        {aiExplanation.entry_suggestion && <span>Entry: ${aiExplanation.entry_suggestion.toFixed(2)}</span>}
-                        {aiExplanation.stop_loss && <span className="text-red-400">SL: ${aiExplanation.stop_loss.toFixed(2)}</span>}
-                        {aiExplanation.take_profit && <span className="text-green-400">TP: ${aiExplanation.take_profit.toFixed(2)}</span>}
+                      <p className="text-xs text-fg-soft">{aiExplanation.reasoning}</p>
+                      <p className="text-xs text-fg-soft"><span className="text-fg-faint font-medium">Confluence: </span>{aiExplanation.confluence_notes}</p>
+                      <p className="text-xs text-fg-soft"><span className="text-fg-faint font-medium">Risk: </span>{aiExplanation.risk_analysis}</p>
+                      <div className="flex flex-col gap-1 text-xs text-fg-soft">
+                        {aiExplanation.entry_suggestion && <span className="num">Entry: ${aiExplanation.entry_suggestion.toFixed(2)}</span>}
+                        {aiExplanation.stop_loss && <span className="num text-down">SL: ${aiExplanation.stop_loss.toFixed(2)}</span>}
+                        {aiExplanation.take_profit && <span className="num text-up">TP: ${aiExplanation.take_profit.toFixed(2)}</span>}
                       </div>
                     </div>
                   )}
@@ -908,9 +915,9 @@ export default function PatternAnalysis() {
         >
           <div className="w-full max-w-2xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex justify-end mb-2">
-              <button onClick={() => setShowDetailModal(false)}
-                className="text-xs text-slate-400 hover:text-white bg-[#1a1d27] border border-[#2a2d3e] rounded-lg px-2 py-1">
-                ✕ Close
+              <button onClick={() => setShowDetailModal(false)} aria-label="Close pattern details"
+                className="btn h-6 !px-2 text-[11px] bg-surface border-line">
+                <X size={12} /> Close
               </button>
             </div>
             <PatternInfoPanel pattern={selected} aiLoading={patternAiLoading && !patternAiCache[selected.id]} />

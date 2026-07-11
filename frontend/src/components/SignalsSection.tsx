@@ -85,64 +85,68 @@ export default function SignalsSection({ symbol }: { symbol: string }) {
   useEffect(() => { runDetail() }, [strategy, symbol, interval])
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-sm font-semibold text-slate-300">Signals</h2>
+    <div className="space-y-3">
+      <h2 className="panel-title">Signals</h2>
 
       {/* Market Scan — every strategy, one timeframe */}
-      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5">
-        <div className="flex items-center justify-between mb-1 flex-wrap gap-3">
-          <h3 className="text-sm font-semibold text-slate-300">
+      <div className="card">
+        <header className="flex items-center justify-between px-3 pt-3 pb-2 flex-wrap gap-2">
+          <h3 className="panel-title">
             Market Scan — every strategy on {symbol} · {interval}
           </h3>
           <select value={interval} onChange={e => setInterval(e.target.value)}
-            className="bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-2 py-1 text-xs text-white outline-none">
+            className="input input-mono !h-6 text-[11px]">
             {INTERVALS.map(i => <option key={i}>{i}</option>)}
           </select>
-        </div>
-        <p className="text-xs text-slate-600 mb-4">All 8 strategies analyze independently — click a row to open its full detail below.</p>
+        </header>
+        <p className="px-3 text-[11px] text-fg-faint mb-2">All 8 strategies analyze independently — click a row to open its full detail below.</p>
         {scanLoading ? (
-          <p className="text-slate-500 text-sm text-center py-6">Scanning…</p>
+          <p className="text-fg-faint text-sm text-center py-6">Scanning…</p>
         ) : (
-          <SignalScanTable
-            signals={scanResults}
-            labelKey="strategy"
-            onRowClick={s => setStrategy(STRATEGY_LABEL_TO_KEY[s.strategy] ?? strategy)}
-          />
+          <div className="px-3 pb-3">
+            <SignalScanTable
+              signals={scanResults}
+              labelKey="strategy"
+              onRowClick={s => setStrategy(STRATEGY_LABEL_TO_KEY[s.strategy] ?? strategy)}
+            />
+          </div>
         )}
       </div>
 
       {/* Multi-timeframe — one strategy, every timeframe */}
-      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5">
-        <div className="flex items-center justify-between mb-1 flex-wrap gap-3">
-          <h3 className="text-sm font-semibold text-slate-300">
+      <div className="card">
+        <header className="flex items-center justify-between px-3 pt-3 pb-2 flex-wrap gap-2">
+          <h3 className="panel-title">
             Multi-Timeframe — {strategy} on {symbol}
           </h3>
           <select value={strategy} onChange={e => setStrategy(e.target.value)}
-            className="bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-2 py-1 text-xs text-white outline-none">
+            className="input !h-6 text-[11px]">
             {STRATEGIES.map(s => <option key={s}>{s}</option>)}
           </select>
-        </div>
-        <p className="text-xs text-slate-600 mb-4">Same strategy, every timeframe analyzed independently — compare which one it currently suits.</p>
+        </header>
+        <p className="px-3 text-[11px] text-fg-faint mb-2">Same strategy, every timeframe analyzed independently — compare which one it currently suits.</p>
         {tfLoading ? (
-          <p className="text-slate-500 text-sm text-center py-6">Scanning timeframes…</p>
+          <p className="text-fg-faint text-sm text-center py-6">Scanning timeframes…</p>
         ) : (
-          <SignalScanTable
-            signals={tfResults}
-            labelKey="interval"
-            onRowClick={s => setInterval(s.interval)}
-          />
+          <div className="px-3 pb-3">
+            <SignalScanTable
+              signals={tfResults}
+              labelKey="interval"
+              onRowClick={s => setInterval(s.interval)}
+            />
+          </div>
         )}
       </div>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm">
+        <div className="card card-pad border-down/40 text-down text-sm">
           {error}
         </div>
       )}
 
       {/* Detail — the exact strategy/interval selected above */}
       {loading ? (
-        <p className="text-slate-500 text-sm text-center py-6">Loading detail…</p>
+        <p className="text-fg-faint text-sm text-center py-6">Loading detail…</p>
       ) : signal && <SignalCard signal={signal} />}
     </div>
   )

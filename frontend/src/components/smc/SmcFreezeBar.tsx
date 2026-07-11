@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { RefreshCw, TriangleAlert } from 'lucide-react'
 import { getLiveMarket } from '../../api/client'
 import type { SmcAnalysis } from '../../api/client'
 
@@ -46,22 +47,23 @@ export default function SmcFreezeBar({ analysis, onReanalyze }: {
 
   const ageSec = Math.max(0, Math.round((Date.now() - Date.parse(analysis.frozen_at)) / 1000))
   const age = ageSec < 60 ? `${ageSec}s` : `${Math.round(ageSec / 60)}m`
-  const driftColor = drift >= 0 ? 'text-green-400' : 'text-red-400'
+  const driftColor = drift >= 0 ? 'text-up' : 'text-down'
 
   return (
-    <div className={`flex items-center flex-wrap gap-x-5 gap-y-1 px-3 py-2 rounded-lg mb-2 text-xs border ${
-      crossed ? 'bg-yellow-500/10 border-yellow-500/40' : 'bg-[#0f1117] border-[#2a2d3e]'}`}>
-      <span className="text-slate-500">Frozen <span className="text-slate-300 font-medium">{frozen.toPrecision(6)}</span>
-        <span className="text-slate-600"> · {age} ago</span></span>
-      <span className="text-slate-500">Live <span className="text-white font-medium">{live.toPrecision(6)}</span></span>
-      <span className="text-slate-500">Drift <span className={`font-medium ${driftColor}`}>{drift >= 0 ? '+' : ''}{drift.toFixed(2)}%</span></span>
+    <div className={`flex items-center flex-wrap gap-x-5 gap-y-1 px-3 py-1.5 rounded-md mb-2 text-[11.5px] border ${
+      crossed ? 'bg-accent-soft border-accent/40' : 'bg-raised border-line'}`}>
+      <span className="text-fg-faint">Frozen <span className="num text-fg-soft font-medium">{frozen.toPrecision(6)}</span>
+        <span className="num text-fg-faint"> · {age} ago</span></span>
+      <span className="text-fg-faint">Live <span className="num text-fg font-medium">{live.toPrecision(6)}</span></span>
+      <span className="text-fg-faint">Drift <span className={`num font-medium ${driftColor}`}>{drift >= 0 ? '+' : ''}{drift.toFixed(2)}%</span></span>
       {crossed && (
-        <span className="text-yellow-400 font-medium">⚠ Live price crossed the {crossed} — plan is stale</span>
+        <span className="text-accent font-medium flex items-center gap-1">
+          <TriangleAlert size={12} aria-label="warning" /> Live price crossed the {crossed} — plan is stale
+        </span>
       )}
       <button onClick={onReanalyze}
-        className={`ml-auto px-3 py-1 rounded-lg font-medium ${
-          crossed ? 'bg-yellow-500/80 hover:bg-yellow-500 text-black' : 'bg-[#1a1d27] border border-[#2a2d3e] text-slate-300 hover:text-white'}`}>
-        Re-analyze
+        className={`btn !h-6 !px-2 !text-[11px] ml-auto ${crossed ? 'btn-primary' : ''}`}>
+        <RefreshCw size={11} aria-label="Re-analyze" /> Re-analyze
       </button>
     </div>
   )

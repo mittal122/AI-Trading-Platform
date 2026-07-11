@@ -6,6 +6,7 @@ import type {
   IChartApi, ISeriesApi, IPriceLine, ISeriesMarkersPluginApi, Time, UTCTimestamp,
   MouseEventParams,
 } from 'lightweight-charts'
+import { Circle, Maximize2, Minimize2, Pencil } from 'lucide-react'
 import { RectanglesPrimitive } from '../lib/rectanglePrimitive'
 import type { RectangleSpec } from '../lib/rectanglePrimitive'
 import { getSmcAnalysis, getLiveMarket } from '../api/client'
@@ -49,10 +50,12 @@ function zoneColors(label: string, bias?: string): [string, string] {
 }
 
 const LEVEL_STYLE: Record<string, { color: string; dashed?: boolean }> = {
-  Entry: { color: '#e2e8f0' }, Stop: { color: '#ef4444' },
-  TP1: { color: '#22c55e' }, TP2: { color: '#22c55e' },
-  EQH: { color: '#64748b', dashed: true }, EQL: { color: '#64748b', dashed: true },
+  Entry: { color: '#e2e8f0' }, Stop: { color: '#f6465d' },
+  TP1: { color: '#2ebd85' }, TP2: { color: '#2ebd85' },
+  EQH: { color: '#5c6475', dashed: true }, EQL: { color: '#5c6475', dashed: true },
 }
+
+const HTF_CHIP: Record<string, string> = { up: 'chip-up', down: 'chip-down' }
 
 export default function SmcAnalyzer() {
   const [symbol, setSymbol] = usePersistedState('smc.symbol', 'BTCUSDT')
@@ -145,21 +148,25 @@ export default function SmcAnalyzer() {
   useEffect(() => {
     if (!chartRef.current) return
     const chart = createChart(chartRef.current, {
-      layout: { background: { type: ColorType.Solid, color: '#0f1117' }, textColor: '#64748b' },
-      grid: { vertLines: { color: '#1a1d27' }, horzLines: { color: '#1a1d27' } },
-      timeScale: { borderColor: '#2a2d3e' },
-      rightPriceScale: { borderColor: '#2a2d3e' },
+      layout: { background: { type: ColorType.Solid, color: '#11141b' }, textColor: '#5c6475' },
+      grid: { vertLines: { color: '#1a1f2b' }, horzLines: { color: '#1a1f2b' } },
+      timeScale: { borderColor: '#232837' },
+      rightPriceScale: { borderColor: '#232837' },
       handleScale: {
         axisPressedMouseMove: { time: true, price: true },
         axisDoubleClickReset: { time: true, price: true },
         mouseWheel: true, pinch: true,
       },
+      crosshair: {
+        vertLine: { color: '#3d465c', labelBackgroundColor: '#303748' },
+        horzLine: { color: '#3d465c', labelBackgroundColor: '#303748' },
+      },
       width: chartRef.current.clientWidth, height: 440,
     })
     const series = chart.addSeries(CandlestickSeries, {
-      upColor: '#22c55e', downColor: '#ef4444',
-      borderUpColor: '#22c55e', borderDownColor: '#ef4444',
-      wickUpColor: '#22c55e', wickDownColor: '#ef4444',
+      upColor: '#2ebd85', downColor: '#f6465d',
+      borderUpColor: '#2ebd85', borderDownColor: '#f6465d',
+      wickUpColor: '#2ebd85', wickDownColor: '#f6465d',
     })
     chartApiRef.current = chart
     candleSeriesRef.current = series
@@ -234,7 +241,7 @@ export default function SmcAnalyzer() {
     if (layers.liquidity) {
       for (const p of analysis.liquidity_pools) {
         lines.push(series.createPriceLine({
-          price: p.price, color: '#64748b', lineWidth: 1, lineStyle: 2,
+          price: p.price, color: '#5c6475', lineWidth: 1, lineStyle: 2,
           axisLabelVisible: true, title: p.direction === 'BEARISH' ? 'EQH' : 'EQL',
         }))
       }
@@ -268,7 +275,7 @@ export default function SmcAnalyzer() {
         if (!s.label) continue
         const bull = s.label === 'HH' || s.label === 'HL'
         markers.push({ time: toSec(s.time), position: s.is_high ? 'aboveBar' : 'belowBar',
-          color: bull ? '#22c55e' : '#ef4444', shape: 'circle', text: s.label })
+          color: bull ? '#2ebd85' : '#f6465d', shape: 'circle', text: s.label })
       }
     }
     if (layers.sweeps) {
@@ -298,7 +305,7 @@ export default function SmcAnalyzer() {
     if (!chart) return
     trendSeriesRef.current.forEach(s => { try { chart.removeSeries(s) } catch { /* gone */ } })
     trendSeriesRef.current = trendlines.map(tl => {
-      const s = chart.addSeries(LineSeries, { color: '#38bdf8', lineWidth: 2, lastValueVisible: false, priceLineVisible: false })
+      const s = chart.addSeries(LineSeries, { color: '#f5a623', lineWidth: 2, lastValueVisible: false, priceLineVisible: false })
       const pts = [
         { time: tl.p1.time as UTCTimestamp, value: tl.p1.price },
         { time: tl.p2.time as UTCTimestamp, value: tl.p2.price },
@@ -313,90 +320,88 @@ export default function SmcAnalyzer() {
     else if (chartCardRef.current) { await chartCardRef.current.requestFullscreen() }
   }
 
+  const pill = (active: boolean) =>
+    `text-[11px] px-2 py-1 rounded-md border cursor-pointer transition-colors ${
+      active ? 'bg-accent-soft text-accent border-accent/30'
+        : 'bg-raised border-line text-fg-faint hover:text-fg-soft'}`
+
   return (
-    <div className="p-6 space-y-4">
+    <div className="p-3 space-y-3 max-w-[1800px] mx-auto">
+      {/* Toolbar (no hero — the nav rail says where we are) */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-white">SMC Analyzer</h1>
-          <p className="text-xs text-slate-500">Smart Money Concepts — structure, zones & a rules-based trade plan</p>
+        <div className="flex items-baseline gap-2">
+          <h2 className="panel-title">SMC Analyzer</h2>
+          <span className="text-[11px] text-fg-faint">structure, zones & a rules-based trade plan</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-44"><SymbolSearchInput value={symbol} onChange={setSymbol} /></div>
           <select value={interval} onChange={e => setInterval(e.target.value)}
-            className="bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-2 py-2 text-xs text-white outline-none">
+            className="input w-20 text-xs">
             {INTERVALS.map(i => <option key={i} value={i}>{i}</option>)}
           </select>
-          <button onClick={run} disabled={loading}
-            className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg">
+          <button onClick={run} disabled={loading} className="btn btn-primary">
             {loading ? 'Analyzing…' : 'Analyze'}
           </button>
         </div>
       </div>
 
-      {error && <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm rounded-lg px-4 py-3">{error}</div>}
+      {error && <div className="card card-pad border-down/40 text-down text-sm">{error}</div>}
 
       {/* Hero: the one thing a user needs — is there a signal, and which way? */}
       {analysis && (
         <SignalBanner analysis={analysis} />
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-4 items-start">
-        <div className="space-y-4">
-          <div ref={chartCardRef} className={`bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-3 ${isFull ? 'flex flex-col justify-center' : ''}`}>
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-3 items-start">
+        <div className="space-y-3">
+          <div ref={chartCardRef} className={`card p-3 ${isFull ? 'flex flex-col justify-center' : ''}`}>
             {analysis && !isFull && <SmcFreezeBar analysis={analysis} onReanalyze={run} />}
             {analysis && (
               <div className="flex items-center flex-wrap gap-1.5 px-1 pb-2">
                 {analysis.htf?.available && (
-                  <span className={`text-[11px] font-medium px-2 py-1 rounded-lg border mr-1 ${
-                    analysis.htf.trend === 'up' ? 'text-green-400 border-green-500/30'
-                      : analysis.htf.trend === 'down' ? 'text-red-400 border-red-500/30'
-                      : 'text-slate-400 border-slate-500/30'}`}>
+                  <span className={`chip mr-1 ${HTF_CHIP[analysis.htf.trend] ?? 'chip-muted'}`}>
                     HTF {analysis.htf.trend}
                   </span>
                 )}
                 {LAYER_DEFS.map(l => (
-                  <button key={l.key} onClick={() => toggle(l.key)}
-                    className={`text-[11px] px-2 py-1 rounded-lg border transition-colors ${
-                      layers[l.key]
-                        ? 'bg-indigo-500/15 border-indigo-500/40 text-indigo-300'
-                        : 'bg-[#0f1117] border-[#2a2d3e] text-slate-600 hover:text-slate-400'}`}>
+                  <button key={l.key} onClick={() => toggle(l.key)} className={pill(layers[l.key])}>
                     {l.label}
                   </button>
                 ))}
                 <div className="ml-auto flex items-center gap-1.5">
-                  <button onClick={() => setDrawMode(d => !d)}
-                    className={`text-[11px] px-2 py-1 rounded-lg border ${
-                      drawMode ? 'bg-sky-500/20 border-sky-500/50 text-sky-300'
-                        : 'bg-[#0f1117] border-[#2a2d3e] text-slate-400 hover:text-white'}`}>
-                    ✎ Trend line
+                  <button onClick={() => setDrawMode(d => !d)} className={pill(drawMode)}>
+                    <span className="flex items-center gap-1"><Pencil size={10} aria-label="draw" /> Trend line</span>
                   </button>
                   {trendlines.length > 0 && (
                     <button onClick={clearTrendlines}
-                      className="text-[11px] px-2 py-1 rounded-lg border bg-[#0f1117] border-[#2a2d3e] text-slate-400 hover:text-red-400">Clear</button>
+                      className="text-[11px] px-2 py-1 rounded-md border cursor-pointer bg-raised border-line text-fg-faint hover:text-down transition-colors">Clear</button>
                   )}
                   <button onClick={toggleFullscreen}
-                    className="text-[11px] px-2 py-1 rounded-lg border bg-[#0f1117] border-[#2a2d3e] text-slate-400 hover:text-white">
-                    ⛶ {isFull ? 'Exit' : 'Fullscreen'}
+                    className="text-[11px] px-2 py-1 rounded-md border cursor-pointer bg-raised border-line text-fg-faint hover:text-fg transition-colors">
+                    <span className="flex items-center gap-1">
+                      {isFull ? <Minimize2 size={10} aria-label="exit fullscreen" /> : <Maximize2 size={10} aria-label="fullscreen" />}
+                      {isFull ? 'Exit' : 'Fullscreen'}
+                    </span>
                   </button>
                 </div>
               </div>
             )}
             {drawMode && (
-              <p className="text-[11px] text-sky-300/80 px-1 pb-1">Click two points on the chart to draw a trend line.</p>
+              <p className="text-[11px] text-accent/80 px-1 pb-1">Click two points on the chart to draw a trend line.</p>
             )}
             <div ref={chartRef} />
             {analysis && (
               <>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 px-2 pt-2 text-[11px] text-slate-500">
-                  <span><span className="text-amber-400">▢</span> POI</span>
-                  <span><span className="text-green-400">▢</span> Bullish OB / demand / FVG</span>
-                  <span><span className="text-red-400">▢</span> Bearish OB / supply / FVG</span>
-                  <span><span className="text-amber-400">●</span> BOS / CHoCH</span>
-                  <span className="ml-auto text-slate-600">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 px-2 pt-2 text-[11px] text-fg-faint">
+                  <LegendSwatch color="#d4af37" label="POI" />
+                  <LegendSwatch color="#2ebd85" label="Bullish OB / demand / FVG" />
+                  <LegendSwatch color="#f6465d" label="Bearish OB / supply / FVG" />
+                  <LegendSwatch color="#d4af37" label="BOS / CHoCH" round />
+                  <span className="num ml-auto">
                     Frozen {new Date(analysis.frozen_at).toLocaleTimeString()} · ATR {analysis.atr.toFixed(2)}
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-x-3 gap-y-1 px-2 pt-1 text-[11px] text-slate-600">
+                <div className="num flex flex-wrap gap-x-3 gap-y-1 px-2 pt-1 text-[11px] text-fg-faint">
                   <span>Live structure:</span>
                   <span>{analysis.order_blocks.filter(o => !o.mitigated).length} order blocks</span>
                   <span>· {analysis.fvgs.filter(f => !f.filled).length} open FVGs</span>
@@ -410,14 +415,14 @@ export default function SmcAnalyzer() {
 
           {/* Fill the space under the chart with the context panels, so the
               left column keeps pace with the taller decision column at right. */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
             {analysis && analysis.reasons.length > 0 && (
-              <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5">
-                <p className="text-xs uppercase tracking-widest text-slate-500 mb-2">Why this read</p>
+              <div className="card card-pad">
+                <p className="panel-title mb-2">Why this read</p>
                 <ul className="space-y-1">
                   {analysis.reasons.map((r, i) => (
-                    <li key={i} className="text-sm text-slate-300 flex gap-2">
-                      <span className="text-slate-600">·</span>{r}
+                    <li key={i} className="text-[12.5px] text-fg-soft flex gap-2">
+                      <span className="text-fg-faint">·</span>{r}
                     </li>
                   ))}
                 </ul>
@@ -428,12 +433,12 @@ export default function SmcAnalyzer() {
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           {analysis?.verdict && <SmcVerdictCard a={analysis} />}
           {analysis?.long_plan && <SmcTradePlanCard plan={analysis.long_plan} symbol={symbol} interval={interval} />}
           {analysis?.short_plan && <SmcTradePlanCard plan={analysis.short_plan} symbol={symbol} interval={interval} />}
           {analysis && (
-            <p className="text-[11px] text-slate-600 leading-relaxed px-1">
+            <p className="text-[11px] text-fg-faint leading-relaxed px-1">
               For research and education only — not financial advice. This is a
               deterministic rules-based read of past price action; markets can and
               do move against any setup. Size and manage risk yourself.
@@ -448,15 +453,26 @@ export default function SmcAnalyzer() {
   )
 }
 
+function LegendSwatch({ color, label, round }: { color: string; label: string; round?: boolean }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className={`inline-block w-2 h-2 ${round ? 'rounded-full' : 'rounded-[2px]'}`}
+        style={{ background: color }} aria-hidden />
+      {label}
+    </span>
+  )
+}
+
 function SignalBanner({ analysis }: { analysis: SmcAnalysis }) {
   const primary = analysis.primary
   if (primary === 'neutral') {
     return (
-      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl px-5 py-4 flex items-center gap-3">
-        <span className="text-slate-500 text-lg">○</span>
+      <div className="card px-4 py-3 flex items-center gap-3">
+        <Circle size={16} className="text-fg-faint shrink-0" aria-label="no setup" />
         <div>
-          <p className="text-sm font-medium text-slate-300">No high-confidence setup right now</p>
-          <p className="text-xs text-slate-500">Neither side cleared the confluence checklist. Strong SMC signals are intentionally rare — wait for one.</p>
+          <p className="text-sm font-medium text-fg-soft">No high-confidence setup right now
+            <span className="chip chip-muted ml-2">NO TRADE</span></p>
+          <p className="text-xs text-fg-faint">Neither side cleared the confluence checklist. Strong SMC signals are intentionally rare — wait for one.</p>
         </div>
       </div>
     )
@@ -464,23 +480,23 @@ function SignalBanner({ analysis }: { analysis: SmcAnalysis }) {
   const plan = primary === 'long' ? analysis.long_plan! : analysis.short_plan!
   const isLong = primary === 'long'
   // Static class strings — Tailwind v4 JIT can't see interpolated class names.
-  const wrap = isLong ? 'bg-green-500/10 border-green-500/40' : 'bg-red-500/10 border-red-500/40'
-  const text = isLong ? 'text-green-400' : 'text-red-400'
-  const badge = isLong ? 'text-green-400 border-green-500/40' : 'text-red-400 border-red-500/40'
+  const wrap = isLong ? 'bg-up-soft border-up/40' : 'bg-down-soft border-down/40'
+  const text = isLong ? 'text-up' : 'text-down'
+  const badge = isLong ? 'chip-up' : 'chip-down'
   return (
-    <div className={`${wrap} border rounded-xl px-5 py-4`}>
+    <div className={`${wrap} border rounded-lg px-4 py-3`}>
       <div className="flex items-center flex-wrap gap-x-6 gap-y-2">
         <div className="flex items-center gap-2">
-          <span className={`${text} text-2xl font-bold uppercase`}>{primary} signal</span>
-          <span className={`text-xs font-bold px-2 py-1 rounded-lg border ${badge}`}>
-            {plan.strength_score}/110 · {plan.strength}
+          <span className={`${text} text-xl font-bold uppercase`}>{primary} signal</span>
+          <span className={`chip ${badge}`}>
+            <span className="num">{plan.strength_score}/110</span> · {plan.strength}
           </span>
         </div>
         <div className="flex gap-5 text-sm">
-          <span className="text-slate-400">Entry <span className="text-white font-medium">{plan.entry.toPrecision(6)}</span></span>
-          <span className="text-slate-400">Stop <span className="text-red-400 font-medium">{plan.stop_loss.toPrecision(6)}</span></span>
-          <span className="text-slate-400">TP1 <span className="text-green-400 font-medium">{plan.take_profit_1.toPrecision(6)}</span></span>
-          <span className="text-slate-400">R:R <span className="text-white font-medium">{plan.risk_reward.toFixed(2)}:1</span></span>
+          <span className="text-fg-soft">Entry <span className="num text-fg font-medium">{plan.entry.toPrecision(6)}</span></span>
+          <span className="text-fg-soft">Stop <span className="num text-down font-medium">{plan.stop_loss.toPrecision(6)}</span></span>
+          <span className="text-fg-soft">TP1 <span className="num text-up font-medium">{plan.take_profit_1.toPrecision(6)}</span></span>
+          <span className="text-fg-soft">R:R <span className="num text-fg font-medium">{plan.risk_reward.toFixed(2)}:1</span></span>
         </div>
       </div>
     </div>

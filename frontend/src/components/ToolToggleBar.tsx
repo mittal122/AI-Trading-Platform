@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Info } from 'lucide-react'
 import { TOOL_HELP, TOOL_HELP_ORDER } from '../data/toolHelpContent'
 import ToolHelpPanel from './ToolHelpPanel'
 
@@ -21,15 +22,16 @@ export default function ToolToggleBar({ enabled, onToggle, loading, readyKeys }:
         const name = TOOL_HELP[key]?.name ?? key
         return (
           <div key={key}
-            className={`flex items-center gap-1 rounded-lg border text-xs transition-colors ${
-              isOn ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300' : 'bg-[#0f1117] border-[#2a2d3e] text-slate-400'
+            className={`flex items-center gap-1 rounded-md border text-xs transition-colors ${
+              isOn ? 'bg-accent-soft text-accent border-accent/40' : 'bg-bg border-line text-fg-soft'
             }`}>
-            <button onClick={() => onToggle(key)} className="pl-3 pr-1.5 py-1.5 font-medium hover:text-white flex items-center gap-1.5">
+            <button onClick={() => onToggle(key)}
+              className="pl-3 pr-1.5 py-1.5 font-medium hover:text-fg flex items-center gap-1.5 cursor-pointer">
               {isOn && (
                 <span
                   title={isPending ? 'Scanning…' : 'Live'}
                   className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                    isPending && loading ? 'bg-amber-400 animate-pulse' : isReady ? 'bg-green-400' : 'bg-amber-400'
+                    isPending && loading ? 'bg-accent animate-pulse' : isReady ? 'bg-up' : 'bg-accent'
                   }`}
                 />
               )}
@@ -38,9 +40,10 @@ export default function ToolToggleBar({ enabled, onToggle, loading, readyKeys }:
             <button
               onClick={() => setHelpKey(key)}
               title={`About ${name}`}
-              className="pr-2 text-slate-500 hover:text-indigo-400"
+              aria-label={`About ${name}`}
+              className="pr-2 text-fg-faint hover:text-accent cursor-pointer"
             >
-              ⓘ
+              <Info size={11} />
             </button>
           </div>
         )

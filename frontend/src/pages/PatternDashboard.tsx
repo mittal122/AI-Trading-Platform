@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { RefreshCw } from 'lucide-react'
 import { getPatternDashboard } from '../api/client'
 import type { PatternDashboardRow } from '../api/client'
 import SymbolSearchInput from '../components/SymbolSearchInput'
@@ -47,77 +48,82 @@ export default function PatternDashboard() {
   const bearish = confirmedRows.filter(r => r.direction === 'BEARISH').sort((a, b) => intervalRank(a.interval) - intervalRank(b.interval))
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-white">Pattern Dashboard</h1>
-          <p className="text-slate-500 text-sm">Every active pattern across all timeframes, one symbol at a time — click a row to open its chart</p>
-        </div>
-        <div className="flex items-center gap-2">
+    <div className="p-3 space-y-3 max-w-[1800px] mx-auto">
+      {/* Toolbar */}
+      <div className="card flex items-center gap-3 px-3 py-2 flex-wrap">
+        <span className="panel-title">Pattern Dashboard</span>
+        <span className="text-[11px] text-fg-faint hidden md:inline">
+          Confirmed patterns across all timeframes — click a row to open its chart
+        </span>
+        <div className="ml-auto flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <label className="field-label !mb-0" htmlFor="pattern-min-conf">Min conf</label>
+            <input id="pattern-min-conf" type="range" min={0} max={100} step={5} value={minConfidence}
+              onChange={e => setMinConfidence(Number(e.target.value))} className="w-28 accent-accent cursor-pointer" />
+            <span className="num text-[11px] text-fg-soft w-9">{minConfidence}%</span>
+          </div>
           <SymbolSearchInput value={symbol} onCommit={setSymbol} className="w-40" />
-          <button onClick={load} disabled={loading}
-            className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg">
-            {loading ? 'Scanning all timeframes…' : 'Scan All Timeframes'}
+          <button onClick={load} disabled={loading} className="btn btn-primary">
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} aria-label="rescan" />
+            {loading ? 'Scanning…' : 'Scan All Timeframes'}
           </button>
         </div>
       </div>
 
-      {error && <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-red-400 text-sm">{error}</div>}
-
-      <div className="flex items-center gap-2 justify-end">
-        <label className="text-xs text-slate-500">Min confidence:</label>
-        <input type="range" min={0} max={100} step={5} value={minConfidence}
-          onChange={e => setMinConfidence(Number(e.target.value))} className="w-32" />
-        <span className="text-xs text-slate-400 w-10">{minConfidence}%</span>
-      </div>
+      {error && <div className="card card-pad border-down/40 text-down text-sm">{error}</div>}
 
       {confirmedRows.length === 0 ? (
-        <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-8 text-center text-slate-500 text-sm">
+        <div className="card card-pad text-center text-fg-faint text-xs py-8">
           {loading ? 'Scanning every timeframe — this calls AI for every pattern found, can take a minute…'
             : rows.length === 0 ? 'No recent patterns found — the scan runs automatically; "Scan All Timeframes" re-runs it.'
             : 'No CONFIRMED signals right now — patterns are still DEVELOPING or were BROKEN.'}
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <PatternSection title="Bullish" accent="text-green-400" rows={bullish} navigate={navigate} />
-          <PatternSection title="Bearish" accent="text-red-400" rows={bearish} navigate={navigate} />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-start">
+          <PatternSection title="BULLISH — CONFIRMED" chipCls="chip-up" rows={bullish} navigate={navigate} />
+          <PatternSection title="BEARISH — CONFIRMED" chipCls="chip-down" rows={bearish} navigate={navigate} />
         </div>
       )}
     </div>
   )
 }
 
-function PatternSection({ title, accent, rows, navigate }: {
-  title: string; accent: string; rows: PatternDashboardRow[]
+function PatternSection({ title, chipCls, rows, navigate }: {
+  title: string; chipCls: string; rows: PatternDashboardRow[]
   navigate: ReturnType<typeof useNavigate>
 }) {
   return (
-    <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5">
-      <h2 className={`text-sm font-semibold mb-3 ${accent}`}>{title} ({rows.length})</h2>
+    <section className="card">
+      <header className="flex items-center justify-between px-3 pt-3 pb-2">
+        <h2 className="panel-title">{title}</h2>
+        <span className={`chip ${chipCls} num`}>{rows.length}</span>
+      </header>
       {rows.length === 0 ? (
-        <p className="text-slate-600 text-xs text-center py-6">No confirmed {title.toLowerCase()} signals.</p>
+        <p className="text-fg-faint text-xs text-center py-6">No confirmed signals.</p>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-xs text-slate-500 border-b border-[#2a2d3e]">
-              <th className="pb-2 pr-4">Timeframe</th>
-              <th className="pb-2 pr-4">Pattern</th>
-              <th className="pb-2">Confidence</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i}
-                onClick={() => navigate(`/patterns?symbol=${r.symbol}&interval=${r.interval}`)}
-                className="border-b border-[#2a2d3e]/50 hover:bg-[#0f1117]/40 cursor-pointer">
-                <td className="py-2 pr-4 text-slate-300 font-medium">{r.interval}</td>
-                <td className="py-2 pr-4 text-white">{r.pattern_name}</td>
-                <td className="py-2 text-indigo-400">{r.confidence.toFixed(1)}%</td>
+        <div className="pb-1.5">
+          <table className="w-full text-[12.5px]">
+            <thead>
+              <tr>
+                <th className="th pl-3">Timeframe</th>
+                <th className="th">Pattern</th>
+                <th className="th pr-3 text-right">Confidence</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i}
+                  onClick={() => navigate(`/patterns?symbol=${r.symbol}&interval=${r.interval}`)}
+                  className="row-hover cursor-pointer">
+                  <td className="td num pl-3 font-medium text-fg-soft">{r.interval}</td>
+                  <td className="td text-fg">{r.pattern_name}</td>
+                  <td className="td num pr-3 text-right text-accent">{r.confidence.toFixed(1)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
-    </div>
+    </section>
   )
 }

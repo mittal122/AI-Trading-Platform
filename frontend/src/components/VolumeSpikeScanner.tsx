@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Info, RefreshCw, ArrowUp, ArrowDown, X } from 'lucide-react'
 import { getVolumeScan, getVolumeScanMarket } from '../api/client'
 import type { VolumeScanRow } from '../api/client'
 import { usePersistedState } from '../hooks/usePersistedState'
@@ -30,21 +31,34 @@ function fmtTime(iso: string): string {
     : d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
 }
 
-// Spike-ratio colour ramp: >=3x is a hard spike, >=2x notable, >=1.5x warming.
+// Spike-ratio intensity ramp: >=3x is a hard spike, >=2x notable, >=1.5x warming.
 function spikeCls(r: number): string {
-  if (r >= 3) return 'text-red-400 bg-red-500/10 border-red-500/40'
-  if (r >= 2) return 'text-amber-400 bg-amber-500/10 border-amber-500/30'
-  if (r >= 1.5) return 'text-yellow-400 bg-yellow-500/10 border-yellow-500/20'
-  return 'text-slate-400 bg-slate-500/10 border-slate-500/20'
+  if (r >= 3) return 'chip-warn font-bold'
+  if (r >= 2) return 'chip-warn'
+  if (r >= 1.5) return 'chip-muted !text-accent'
+  return 'chip-muted'
 }
 
 // Buy/sell classification of the spike candle from its taker-buy share.
 // >55% aggressive buyers, <45% aggressive sellers, else a balanced tug-of-war.
-function flowBadge(buyRatio: number): { text: string; cls: string } {
+function FlowBadge({ buyRatio }: { buyRatio: number }) {
   const pct = Math.round(buyRatio * 100)
-  if (buyRatio >= 0.55) return { text: `▲ Buy ${pct}%`, cls: 'text-green-400 bg-green-500/10 border-green-500/30' }
-  if (buyRatio <= 0.45) return { text: `▼ Sell ${100 - pct}%`, cls: 'text-red-400 bg-red-500/10 border-red-500/30' }
-  return { text: `~ Mixed ${pct}%`, cls: 'text-slate-400 bg-slate-500/10 border-slate-500/20' }
+  const title = `${pct}% of this candle's volume was aggressive buying`
+  if (buyRatio >= 0.55) {
+    return (
+      <span className="chip chip-up num" title={title}>
+        <ArrowUp size={10} aria-label="aggressive buying" />Buy {pct}%
+      </span>
+    )
+  }
+  if (buyRatio <= 0.45) {
+    return (
+      <span className="chip chip-down num" title={title}>
+        <ArrowDown size={10} aria-label="aggressive selling" />Sell {100 - pct}%
+      </span>
+    )
+  }
+  return <span className="chip chip-muted num" title={title}>Mixed {pct}%</span>
 }
 
 export default function VolumeSpikeScanner({ symbols, onSelect }: {
@@ -98,112 +112,117 @@ export default function VolumeSpikeScanner({ symbols, onSelect }: {
   const rescan = isMarket ? loadMarket : loadWatchlist
 
   return (
-    <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-4">
+    <div className="card card-pad">
       <div className="flex flex-wrap items-center gap-2 mb-3">
-        <h2 className="text-sm font-semibold text-slate-300">Volume Spike Scanner</h2>
-        <button onClick={() => setShowHelp(v => !v)}
-          className="text-slate-600 hover:text-slate-300 text-xs" title="What am I looking at?">ⓘ</button>
+        <h2 className="panel-title">Volume Spike Scanner</h2>
+        <button onClick={() => setShowHelp(v => !v)} aria-label="What am I looking at?"
+          className="text-fg-faint hover:text-fg-soft cursor-pointer" title="What am I looking at?">
+          <Info size={12} />
+        </button>
 
         {/* Mode toggle */}
-        <div className="flex rounded-lg overflow-hidden border border-[#2a2d3e] ml-1">
+        <div className="flex rounded-md overflow-hidden border border-line ml-1">
           {(['watchlist', 'market'] as const).map(m => (
             <button key={m} onClick={() => setMode(m)}
-              className={`text-xs px-2.5 py-1 transition-colors ${
-                mode === m ? 'bg-indigo-500/20 text-indigo-300' : 'bg-[#0f1117] text-slate-500 hover:text-white'}`}>
+              className={`text-[11px] font-medium px-2.5 h-6 cursor-pointer transition-colors ${
+                mode === m ? 'bg-accent-soft text-accent' : 'text-fg-faint hover:text-fg-soft hover:bg-raised'}`}>
               {m === 'watchlist' ? 'Watchlist' : 'Whole market (top 300)'}
             </button>
           ))}
         </div>
-        <span className="text-[10px] text-slate-600">
+        <span className="text-[10px] text-fg-faint">
           {isMarket ? 'ranked by surge × liquidity — where the order flow just jumped' : 'order push across your watchlist · hottest first'}
         </span>
 
         <div className="ml-auto flex items-center gap-2">
           <select value={interval} onChange={e => setInterval_(e.target.value)}
-            className="bg-[#0f1117] border border-[#2a2d3e] rounded-lg text-xs text-slate-300 px-2 py-1">
+            className="input input-mono !h-6 text-[11px]">
             {INTERVALS.map(iv => <option key={iv} value={iv}>{iv}</option>)}
           </select>
-          <label className="text-[10px] text-slate-600">window
+          <label className="text-[10px] text-fg-faint">window
             <input type="number" min={5} max={200} value={window}
               onChange={e => setWindow(Math.max(5, Math.min(200, Number(e.target.value) || 20)))}
-              className="ml-1 w-14 bg-[#0f1117] border border-[#2a2d3e] rounded-lg text-xs text-slate-300 px-2 py-1" />
+              className="input input-mono !h-6 text-[11px] ml-1 w-14" />
           </label>
-          <button onClick={rescan} disabled={loading}
-            className="text-xs px-2.5 py-1 rounded-lg bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 hover:bg-indigo-500/30 disabled:opacity-50">
-            {loading ? (isMarket ? 'Scanning…' : '…') : isMarket ? 'Scan market' : '↻'}
+          <button onClick={rescan} disabled={loading} aria-label={isMarket ? 'Scan market' : 'Refresh scan'}
+            className="btn !h-6 text-[11px]">
+            {loading
+              ? (isMarket ? 'Scanning…' : <RefreshCw size={12} className="animate-spin" />)
+              : isMarket ? 'Scan market' : <RefreshCw size={12} />}
           </button>
         </div>
       </div>
 
       {showHelp && (
-        <div className="mb-3 text-[11px] text-slate-400 bg-[#0f1117] border border-[#2a2d3e] rounded-lg p-3 space-y-1">
-          <p><span className="text-slate-300">Whole market</span> — scans the 300 most-liquid coins and ranks by <span className="text-slate-300">Score = surge × liquidity</span>, so coins whose order flow just jumped (and that you can actually trade) float to the top.</p>
-          <p><span className="text-slate-300">Vol (window)</span> — the last closed candle's traded volume: how much got pushed right now.</p>
-          <p><span className="text-slate-300">Avg Vol</span> — mean volume over the previous {window} candles (the "normal" for this coin/timeframe).</p>
-          <p><span className="text-slate-300">Spike×</span> — Vol ÷ Avg Vol. Above 2× means a real surge; 3×+ is a hard spike.</p>
-          <p><span className="text-slate-300">Flow</span> — was this candle's volume aggressive <span className="text-green-400">buying</span> or <span className="text-red-400">selling</span>? From taker-buy share: ▲ Buy ≥55%, ▼ Sell ≤45%, ~ Mixed in between. This is who was hitting the market (impatient market orders), i.e. who drove the spike.</p>
-          <p><span className="text-slate-300">Orders</span> — number of trades that printed on that candle (how many orders were placed).</p>
-          <p><span className="text-slate-300">Max Push</span> — the single biggest candle's volume in the window (largest order push), as a × of the average.</p>
-          <p className="text-slate-600">Uses the last <em>closed</em> candle — the live candle's volume is partial and would hide real spikes. The market scan is heavy (300 calls) so it runs on demand, not on a timer.</p>
+        <div className="mb-3 text-[11px] text-fg-soft bg-raised border border-line rounded-lg p-3 space-y-1">
+          <p><span className="text-fg">Whole market</span> — scans the 300 most-liquid coins and ranks by <span className="text-fg">Score = surge × liquidity</span>, so coins whose order flow just jumped (and that you can actually trade) float to the top.</p>
+          <p><span className="text-fg">Vol (window)</span> — the last closed candle's traded volume: how much got pushed right now.</p>
+          <p><span className="text-fg">Avg Vol</span> — mean volume over the previous {window} candles (the "normal" for this coin/timeframe).</p>
+          <p><span className="text-fg">Spike×</span> — Vol ÷ Avg Vol. Above 2× means a real surge; 3×+ is a hard spike.</p>
+          <p><span className="text-fg">Flow</span> — was this candle's volume aggressive <span className="text-up">buying</span> or <span className="text-down">selling</span>? From taker-buy share: Buy ≥55%, Sell ≤45%, Mixed in between. This is who was hitting the market (impatient market orders), i.e. who drove the spike.</p>
+          <p><span className="text-fg">Orders</span> — number of trades that printed on that candle (how many orders were placed).</p>
+          <p><span className="text-fg">Max Push</span> — the single biggest candle's volume in the window (largest order push), as a × of the average.</p>
+          <p className="text-fg-faint">Uses the last <em>closed</em> candle — the live candle's volume is partial and would hide real spikes. The market scan is heavy (300 calls) so it runs on demand, not on a timer.</p>
         </div>
       )}
 
       {(!isMarket && symbols.length === 0) ? (
-        <p className="text-xs text-slate-600 text-center py-4">Add coins to your watchlist above to scan them.</p>
+        <p className="text-xs text-fg-faint text-center py-4">Add coins to your watchlist above to scan them.</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-xs">
+          <table className="w-full">
             <thead>
-              <tr className="text-slate-600 text-left border-b border-[#2a2d3e]">
-                <th className="py-2 pr-3 font-medium">Time</th>
-                <th className="py-2 pr-3 font-medium">Symbol</th>
-                <th className="py-2 pr-3 font-medium text-right">LTP</th>
-                <th className="py-2 pr-3 font-medium">TF</th>
-                <th className="py-2 pr-3 font-medium text-right">Vol (window)</th>
-                <th className="py-2 pr-3 font-medium text-right">Avg Vol</th>
-                <th className="py-2 pr-3 font-medium text-right">Spike×</th>
-                <th className="py-2 pr-3 font-medium text-center">Flow</th>
-                <th className="py-2 pr-3 font-medium text-right">Orders</th>
-                <th className="py-2 pr-3 font-medium text-right">Max Push</th>
-                {isMarket && <th className="py-2 font-medium text-right">Score</th>}
+              <tr className="text-left">
+                <th className="th">Time</th>
+                <th className="th">Symbol</th>
+                <th className="th text-right">LTP</th>
+                <th className="th">TF</th>
+                <th className="th text-right">Vol (window)</th>
+                <th className="th text-right">Avg Vol</th>
+                <th className="th text-right">Spike×</th>
+                <th className="th text-center">Flow</th>
+                <th className="th text-right">Orders</th>
+                <th className="th text-right">Max Push</th>
+                {isMarket && <th className="th text-right">Score</th>}
               </tr>
             </thead>
             <tbody>
               {rows.map(r => (
                 <tr key={r.symbol}
                   onClick={() => !r.error && onSelect?.(r.symbol)}
-                  className={`border-b border-[#20232f] ${r.error ? '' : 'cursor-pointer hover:bg-[#232736]'} transition-colors`}>
+                  className={r.error ? '' : 'row-hover cursor-pointer'}>
                   {r.error ? (
                     <>
-                      <td className="py-2 pr-3 text-slate-600 tabular-nums">—</td>
-                      <td className="py-2 pr-3 font-medium text-slate-400">{r.symbol.replace('USDT', '')}</td>
-                      <td className="py-2 pr-3 text-red-400/70" colSpan={isMarket ? 9 : 8}>✕ {r.error}</td>
+                      <td className="td num text-fg-faint">—</td>
+                      <td className="td font-medium">{r.symbol.replace('USDT', '')}</td>
+                      <td className="td text-down/70" colSpan={isMarket ? 9 : 8}>
+                        <span className="inline-flex items-center gap-1">
+                          <X size={11} aria-label="scan error" />{r.error}
+                        </span>
+                      </td>
                     </>
                   ) : (
                     <>
-                      <td className="py-2 pr-3 text-slate-500 tabular-nums">{fmtTime(r.time)}</td>
-                      <td className="py-2 pr-3 font-medium text-white">{r.symbol.replace('USDT', '')}</td>
-                      <td className="py-2 pr-3 text-right text-slate-300 tabular-nums">{fmtPrice(r.ltp)}</td>
-                      <td className="py-2 pr-3 text-slate-500">{r.interval}</td>
-                      <td className="py-2 pr-3 text-right text-slate-300 tabular-nums">{fmtNum(r.volume_window)}</td>
-                      <td className="py-2 pr-3 text-right text-slate-500 tabular-nums">{fmtNum(r.volume_average)}</td>
-                      <td className="py-2 pr-3 text-right">
-                        <span className={`inline-block px-2 py-0.5 rounded-md border font-semibold tabular-nums ${spikeCls(r.spike_ratio)}`}>
+                      <td className="td num text-fg-faint">{fmtTime(r.time)}</td>
+                      <td className="td font-medium text-fg">{r.symbol.replace('USDT', '')}</td>
+                      <td className="td num text-right">{fmtPrice(r.ltp)}</td>
+                      <td className="td num text-fg-faint">{r.interval}</td>
+                      <td className="td num text-right">{fmtNum(r.volume_window)}</td>
+                      <td className="td num text-right text-fg-faint">{fmtNum(r.volume_average)}</td>
+                      <td className="td text-right">
+                        <span className={`chip num ${spikeCls(r.spike_ratio)}`}>
                           {r.spike_ratio.toFixed(2)}×
                         </span>
                       </td>
-                      <td className="py-2 pr-3 text-center">
-                        <span className={`inline-block px-2 py-0.5 rounded-md border font-medium tabular-nums ${flowBadge(r.buy_ratio).cls}`}
-                          title={`${Math.round(r.buy_ratio * 100)}% of this candle's volume was aggressive buying`}>
-                          {flowBadge(r.buy_ratio).text}
-                        </span>
+                      <td className="td text-center">
+                        <FlowBadge buyRatio={r.buy_ratio} />
                       </td>
-                      <td className="py-2 pr-3 text-right text-slate-300 tabular-nums">{fmtNum(r.orders)}</td>
-                      <td className="py-2 pr-3 text-right text-slate-400 tabular-nums" title={`peak candle volume ${fmtNum(r.max_push_volume)}`}>
+                      <td className="td num text-right">{fmtNum(r.orders)}</td>
+                      <td className="td num text-right text-fg-faint" title={`peak candle volume ${fmtNum(r.max_push_volume)}`}>
                         {r.max_push_ratio.toFixed(1)}×
                       </td>
                       {isMarket && (
-                        <td className="py-2 text-right font-semibold text-indigo-300 tabular-nums"
+                        <td className="td num text-right font-semibold text-accent"
                           title={`24h volume $${(r.quote_volume_24h ?? 0).toLocaleString()}`}>
                           {(r.blended_score ?? 0).toFixed(2)}
                         </td>
@@ -213,7 +232,7 @@ export default function VolumeSpikeScanner({ symbols, onSelect }: {
                 </tr>
               ))}
               {rows.length === 0 && !loading && (
-                <tr><td colSpan={isMarket ? 11 : 10} className="py-4 text-center text-slate-600">
+                <tr><td colSpan={isMarket ? 11 : 10} className="td py-4 text-center text-fg-faint">
                   {isMarket ? 'Click “Scan market” to rank the top 300 coins.' : 'No data.'}
                 </td></tr>
               )}
@@ -223,7 +242,7 @@ export default function VolumeSpikeScanner({ symbols, onSelect }: {
       )}
 
       {updatedAt && (
-        <p className="text-[10px] text-slate-600 mt-2 text-right">
+        <p className="num text-[10px] text-fg-faint mt-2 text-right">
           {isMarket
             ? `scanned ${scanned ?? '—'} coins · updated ${updatedAt} · on demand`
             : `updated ${updatedAt} · auto every 20s`}

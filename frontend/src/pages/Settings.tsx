@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Check, Circle } from 'lucide-react'
 import { deleteBinanceKeys, getBinanceKeyStatus, saveBinanceKeys, getAdminToken, setAdminToken } from '../api/client'
 
 export default function Settings() {
@@ -59,128 +60,145 @@ export default function Settings() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <h1 className="text-xl font-bold text-white">Settings</h1>
-
+    <div className="p-3 space-y-3 max-w-[1800px] mx-auto">
       {/* Admin token — only needed when the deployment locks money endpoints
           (ADMIN_API_TOKEN set server-side). Blank on single-operator localhost. */}
-      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5 space-y-3">
-        <h2 className="text-sm font-semibold text-slate-300">Admin Access Token</h2>
-        <p className="text-xs text-slate-500">
-          Only required if this deployment has locked the sensitive actions (saving Binance keys,
-          starting live trading, deleting all history) behind an admin token. Leave blank for a
-          local single-operator setup. Stored only in this browser and sent as an <code className="text-indigo-400">X-Admin-Token</code> header.
-        </p>
-        <div className="flex items-center gap-3">
-          <input type="password" autoComplete="off" value={adminToken}
-            onChange={e => setAdminTokenInput(e.target.value)} placeholder="admin token (optional)"
-            className="flex-1 max-w-md bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-indigo-500" />
-          <button onClick={saveAdmin}
-            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-sm text-white font-medium">
-            Save
-          </button>
-          {adminSaved && <span className="text-xs text-green-400">✓ Saved for this browser</span>}
+      <section className="card">
+        <header className="flex items-center justify-between px-3 pt-3 pb-2">
+          <h2 className="panel-title">Admin Access Token</h2>
+        </header>
+        <div className="px-3 pb-3 space-y-3">
+          <p className="text-xs text-fg-faint">
+            Only required if this deployment has locked the sensitive actions (saving Binance keys,
+            starting live trading, deleting all history) behind an admin token. Leave blank for a
+            local single-operator setup. Stored only in this browser and sent as an <code className="text-accent">X-Admin-Token</code> header.
+          </p>
+          <div className="flex items-center gap-3">
+            <input type="password" autoComplete="off" value={adminToken}
+              onChange={e => setAdminTokenInput(e.target.value)} placeholder="admin token (optional)"
+              className="input input-mono flex-1 max-w-md" />
+            <button onClick={saveAdmin} className="btn btn-primary">
+              Save
+            </button>
+            {adminSaved && (
+              <span className="text-xs text-up flex items-center gap-1">
+                <Check size={12} aria-label="saved" /> Saved for this browser
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      </section>
 
-      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-300">Binance Account (Live Trading)</h2>
+      <section className="card">
+        <header className="flex items-center justify-between px-3 pt-3 pb-2">
+          <h2 className="panel-title">Binance Account (Live Trading)</h2>
           {status && (
-            <span className={`text-xs px-2 py-0.5 rounded-full ${status.configured ? 'bg-green-500/10 text-green-400' : 'bg-slate-700/40 text-slate-500'}`}>
+            <span className={`chip ${status.configured ? 'chip-up' : 'chip-muted'}`}>
               {status.configured ? `Configured — ${status.key_preview}` : 'Not configured'}
             </span>
           )}
-        </div>
-        <p className="text-xs text-slate-500">
-          Enter your own Binance API key/secret to place real orders in Live Trading.
-          Stored encrypted in the database, never shown again after saving.
-          Leave blank to keep using Paper Trading / dry-run mode only.
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">API Key</label>
-            <input
-              type="password"
-              autoComplete="off"
-              value={apiKey}
-              onChange={e => setApiKey(e.target.value)}
-              placeholder={status?.configured ? '••••••••••••••••' : 'Binance API key'}
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none"
-            />
+        </header>
+        <div className="px-3 pb-3 space-y-3">
+          <p className="text-xs text-fg-faint">
+            Enter your own Binance API key/secret to place real orders in Live Trading.
+            Stored encrypted in the database, never shown again after saving.
+            Leave blank to keep using Paper Trading / dry-run mode only.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="field-label">API Key</label>
+              <input
+                type="password"
+                autoComplete="off"
+                value={apiKey}
+                onChange={e => setApiKey(e.target.value)}
+                placeholder={status?.configured ? '••••••••••••••••' : 'Binance API key'}
+                className="input input-mono w-full"
+              />
+            </div>
+            <div>
+              <label className="field-label">API Secret</label>
+              <input
+                type="password"
+                autoComplete="off"
+                value={apiSecret}
+                onChange={e => setApiSecret(e.target.value)}
+                placeholder={status?.configured ? '••••••••••••••••' : 'Binance API secret'}
+                className="input input-mono w-full"
+              />
+            </div>
           </div>
-          <div>
-            <label className="text-xs text-slate-500 mb-1 block">API Secret</label>
-            <input
-              type="password"
-              autoComplete="off"
-              value={apiSecret}
-              onChange={e => setApiSecret(e.target.value)}
-              placeholder={status?.configured ? '••••••••••••••••' : 'Binance API secret'}
-              className="w-full bg-[#0f1117] border border-[#2a2d3e] rounded-lg px-3 py-2 text-sm text-white outline-none"
-            />
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleSave}
-            disabled={saving || apiKey.trim().length < 10 || apiSecret.trim().length < 10}
-            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-sm text-white font-medium"
-          >
-            {saving ? 'Saving…' : 'Save Keys'}
-          </button>
-          {status?.configured && (
+          <div className="flex items-center gap-3">
             <button
-              onClick={handleRemove}
-              className={`px-4 py-2 rounded-lg text-sm font-medium border ${confirmRemove ? 'bg-red-600 border-red-600 text-white' : 'border-[#2a2d3e] text-slate-400 hover:text-red-400'}`}
+              onClick={handleSave}
+              disabled={saving || apiKey.trim().length < 10 || apiSecret.trim().length < 10}
+              className="btn btn-primary disabled:opacity-40 disabled:cursor-not-allowed"
             >
-              {confirmRemove ? 'Click again to confirm' : 'Remove Keys'}
+              {saving ? 'Saving…' : 'Save Keys'}
             </button>
-          )}
-          {message && (
-            <span className={`text-xs ${message.error ? 'text-red-400' : 'text-green-400'}`}>{message.text}</span>
-          )}
+            {status?.configured && (
+              <button
+                onClick={handleRemove}
+                className={`btn ${confirmRemove ? 'btn-sell' : 'btn-danger-outline'}`}
+              >
+                {confirmRemove ? 'Click again to confirm' : 'Remove Keys'}
+              </button>
+            )}
+            {message && (
+              <span className={`text-xs ${message.error ? 'text-down' : 'text-up'}`}>{message.text}</span>
+            )}
+          </div>
         </div>
-      </div>
+      </section>
 
-      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5 space-y-3">
-        <h2 className="text-sm font-semibold text-slate-300">Environment Variables Required</h2>
-        {[
-          ['NVIDIA_API_KEY', 'Required for all AI features — routes to NVIDIA NIM (chat, analyst, validator, etc.)'],
-          ['BINANCE_API_KEY', 'Fallback only — prefer the Binance Account form above'],
-          ['BINANCE_SECRET', 'Fallback only — prefer the Binance Account form above'],
-          ['DATABASE_URL', 'Optional — defaults to SQLite (trading.db)'],
-          ['MARKET_ANALYST_MODEL', 'Optional — defaults to nemotron-3-super'],
-          ['CHAT_ASSISTANT_MODEL', 'Optional — defaults to kimi-k2.5'],
-        ].map(([k, v]) => (
-          <div key={k} className="flex items-start gap-3 py-2 border-b border-[#2a2d3e]/50 last:border-0">
-            <code className="text-xs text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded shrink-0">{k}</code>
-            <p className="text-xs text-slate-500">{v}</p>
-          </div>
-        ))}
-      </div>
+      <section className="card">
+        <header className="px-3 pt-3 pb-2">
+          <h2 className="panel-title">Environment Variables Required</h2>
+        </header>
+        <div className="px-3 pb-2">
+          {[
+            ['NVIDIA_API_KEY', 'Required for all AI features — routes to NVIDIA NIM (chat, analyst, validator, etc.)'],
+            ['BINANCE_API_KEY', 'Fallback only — prefer the Binance Account form above'],
+            ['BINANCE_SECRET', 'Fallback only — prefer the Binance Account form above'],
+            ['DATABASE_URL', 'Optional — defaults to SQLite (trading.db)'],
+            ['MARKET_ANALYST_MODEL', 'Optional — defaults to nemotron-3-super'],
+            ['CHAT_ASSISTANT_MODEL', 'Optional — defaults to kimi-k2.5'],
+          ].map(([k, v]) => (
+            <div key={k} className="flex items-start gap-3 py-1.5 border-b border-line/50 last:border-0">
+              <code className="num text-[11px] text-accent bg-accent-soft px-1.5 py-0.5 rounded shrink-0">{k}</code>
+              <p className="text-xs text-fg-faint">{v}</p>
+            </div>
+          ))}
+        </div>
+      </section>
 
-      <div className="bg-[#1a1d27] border border-[#2a2d3e] rounded-xl p-5">
-        <h2 className="text-sm font-semibold text-slate-300 mb-3">Phase Completion</h2>
-        {[
-          ['Phase 1', 'Core Infrastructure', true],
-          ['Phase 2', 'Professional Strategy System', true],
-          ['Phase 3', 'Advanced Risk Management', true],
-          ['Phase 4', 'Portfolio Analytics', true],
-          ['Phase 5', 'AI Integration', true],
-          ['Phase 6', 'Paper Trading', true],
-          ['Phase 7', 'Live Trading', true],
-          ['Phase 8', 'Database Integration', true],
-          ['Phase 9', 'Frontend Dashboard', true],
-          ['Phase 10', 'SaaS Platform', true],
-        ].map(([phase, label, done]) => (
-          <div key={String(phase)} className="flex items-center gap-3 py-2 border-b border-[#2a2d3e]/50 last:border-0">
-            <span className={`text-sm ${done ? 'text-green-400' : 'text-slate-600'}`}>{done ? '✓' : '○'}</span>
-            <span className="text-xs text-slate-500 w-16">{phase}</span>
-            <span className={`text-sm ${done ? 'text-slate-300' : 'text-slate-600'}`}>{label}</span>
-          </div>
-        ))}
-      </div>
+      <section className="card">
+        <header className="px-3 pt-3 pb-2">
+          <h2 className="panel-title">Phase Completion</h2>
+        </header>
+        <div className="px-3 pb-2">
+          {[
+            ['Phase 1', 'Core Infrastructure', true],
+            ['Phase 2', 'Professional Strategy System', true],
+            ['Phase 3', 'Advanced Risk Management', true],
+            ['Phase 4', 'Portfolio Analytics', true],
+            ['Phase 5', 'AI Integration', true],
+            ['Phase 6', 'Paper Trading', true],
+            ['Phase 7', 'Live Trading', true],
+            ['Phase 8', 'Database Integration', true],
+            ['Phase 9', 'Frontend Dashboard', true],
+            ['Phase 10', 'SaaS Platform', true],
+          ].map(([phase, label, done]) => (
+            <div key={String(phase)} className="flex items-center gap-3 py-1.5 border-b border-line/50 last:border-0">
+              {done
+                ? <Check size={14} className="text-up shrink-0" aria-label="complete" />
+                : <Circle size={14} className="text-fg-faint shrink-0" aria-label="incomplete" />}
+              <span className="num text-[11px] text-fg-faint w-16">{phase}</span>
+              <span className={`text-[12.5px] ${done ? 'text-fg-soft' : 'text-fg-faint'}`}>{label}</span>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   )
 }
