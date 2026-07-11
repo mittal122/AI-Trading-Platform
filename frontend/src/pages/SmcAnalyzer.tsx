@@ -12,6 +12,9 @@ import type { RectangleSpec } from '../lib/rectanglePrimitive'
 import { getSmcAnalysis, getLiveMarket, getMarket } from '../api/client'
 import type { SmcAnalysis } from '../api/client'
 import SymbolSearchInput from '../components/SymbolSearchInput'
+import IndicatorSettings from '../components/IndicatorSettings'
+import type { IndicatorConfig } from '../components/IndicatorSettings'
+import { fibLevels } from '../lib/indicators'
 import { usePersistedState } from '../hooks/usePersistedState'
 import SmcVerdictCard from '../components/smc/SmcVerdictCard'
 import SmcScoreBars from '../components/smc/SmcScoreBars'
@@ -23,18 +26,19 @@ import SmcFreezeBar from '../components/smc/SmcFreezeBar'
 
 const INTERVALS = ['5m', '15m', '30m', '1h', '4h', '1d']
 
-type LayerKey = 'zones' | 'structure' | 'liquidity' | 'sweeps' | 'inducements' | 'equilibrium' | 'plan' | 'swings' | 'volume'
+type LayerKey = 'zones' | 'structure' | 'liquidity' | 'sweeps' | 'inducements' | 'equilibrium' | 'plan' | 'swings' | 'volume' | 'fib'
 const LAYER_DEFS: { key: LayerKey; label: string }[] = [
   { key: 'zones', label: 'Zones' }, { key: 'structure', label: 'BOS/CHoCH' },
   { key: 'plan', label: 'Trade plan' }, { key: 'liquidity', label: 'Liquidity' },
   { key: 'equilibrium', label: 'Equilibrium' }, { key: 'volume', label: 'Volume' },
   { key: 'sweeps', label: 'Sweeps' },
   { key: 'swings', label: 'Swings' }, { key: 'inducements', label: 'Inducements' },
+  { key: 'fib', label: 'Fibonacci' },
 ]
 const DEFAULT_LAYERS: Record<LayerKey, boolean> = {
   zones: true, structure: true, plan: true, liquidity: true,
   equilibrium: true, sweeps: true, swings: false, inducements: false,
-  volume: true,
+  volume: true, fib: false,
 }
 
 const toSec = (iso: string) => Math.floor(Date.parse(iso) / 1000) as UTCTimestamp
@@ -70,6 +74,9 @@ export default function SmcAnalyzer() {
   // to the default so a newly added layer (e.g. volume) still shows/toggles.
   const layerOn = (k: LayerKey) => layers[k] ?? DEFAULT_LAYERS[k]
   const toggle = (k: LayerKey) => setLayers(l => ({ ...l, [k]: !(l[k] ?? DEFAULT_LAYERS[k]) }))
+  const [indicatorConfig, setIndicatorConfig] = usePersistedState<IndicatorConfig>('smc.indicators', {
+    emaPeriods: [], fibLevels: [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1], fibLookback: 200,
+  })
 
   // Drawn trend lines, persisted per symbol+interval (a map keyed by both).
   type TL = { p1: { time: number; price: number }; p2: { time: number; price: number } }
@@ -86,6 +93,7 @@ export default function SmcAnalyzer() {
   const rectRef = useRef<RectanglesPrimitive | null>(null)
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const priceLinesRef = useRef<IPriceLine[]>([])
+  const fibLinesRef = useRef<IPriceLine[]>([])
   const trendSeriesRef = useRef<ISeriesApi<'Line'>[]>([])
   const pendingPointRef = useRef<{ time: number; price: number } | null>(null)
   const drawModeRef = useRef(false)
@@ -368,6 +376,23 @@ export default function SmcAnalyzer() {
     }
     priceLinesRef.current = lines
 
+    // ── Fibonacci retracement: most recent swing high → most recent swing low ──
+    fibLinesRef.current.forEach(l => series.removePriceLine(l))
+    fibLinesRef.current = []
+    if (layerOn('fib')) {
+      const highs = analysis.swings.filter(s => s.is_high)
+      const lows = analysis.swings.filter(s => !s.is_high)
+      const hi = highs[highs.length - 1]?.price
+      const lo = lows[lows.length - 1]?.price
+      if (hi !== undefined && lo !== undefined) {
+        fibLinesRef.current = fibLevels(hi, lo, indicatorConfig.fibLevels).map(({ level, price }) =>
+          series.createPriceLine({
+            price, color: '#d4af37', lineWidth: 1, lineStyle: 2,
+            axisLabelVisible: true, title: `Fib ${level}`,
+          }))
+      }
+    }
+
     // ── Markers: structure, swings, sweeps, inducements ──
     const markers: any[] = []
     if (layers.structure) {
@@ -407,7 +432,7 @@ export default function SmcAnalyzer() {
       chart.timeScale().fitContent()
       series.priceScale().applyOptions({ autoScale: true })
     }
-  }, [analysis, layers])
+  }, [analysis, layers, indicatorConfig])
 
   // Redraw user-drawn trend lines whenever they change (or the symbol/tf does).
   useEffect(() => {
@@ -478,6 +503,7 @@ export default function SmcAnalyzer() {
                     {l.label}
                   </button>
                 ))}
+                <IndicatorSettings value={indicatorConfig} onChange={setIndicatorConfig} />
                 {loadingOlder && <span className="text-[10px] text-accent ml-1">loading history…</span>}
                 <div className="ml-auto flex items-center gap-1.5">
                   <button onClick={() => setDrawMode(d => !d)} className={pill(drawMode)}>

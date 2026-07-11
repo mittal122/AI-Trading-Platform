@@ -16,6 +16,9 @@ import {
 import type {
   Candle, DetectedPattern, AIPatternExplanation, AnalysisToolResult, AIToolExplanation, ChartAnnotations,
 } from '../api/client'
+import IndicatorSettings from '../components/IndicatorSettings'
+import type { IndicatorConfig } from '../components/IndicatorSettings'
+import { computeEma, fibLevels } from '../lib/indicators'
 import PatternInfoPanel from '../components/PatternInfoPanel'
 import SignalsSection from '../components/SignalsSection'
 import SymbolSearchInput from '../components/SymbolSearchInput'
@@ -61,11 +64,20 @@ const STATUS_CHIP: Record<string, { label: string; cls: string; Icon: LucideIcon
   BROKEN:     { label: 'Failed',    cls: 'chip-muted', Icon: X },
 }
 
+// Distinct, non-market colors for user-added EMA lines (green/red are
+// reserved for direction; indexes cycle if more periods than colors).
+const EMA_COLORS = ['#f5a623', '#a78bfa', '#e8ecf4', '#c2703d', '#d4af37']
+
 const TOOL_LINE_COLORS: Record<string, string> = {
   ema20: '#22c55e', ema50: '#3b82f6', sma50: '#f59e0b', sma200: '#ef4444',
   daily_vwap: '#818cf8', anchored_vwap: '#c084fc',
   trend_line: '#fbbf24', trend_resistance: '#ef4444', trend_support: '#22c55e',
 }
+
+const indicatorPill = (active: boolean) =>
+  `text-[11px] px-2 py-1 rounded-md border cursor-pointer transition-colors ${
+    active ? 'bg-accent-soft text-accent border-accent/30'
+      : 'bg-raised border-line text-fg-faint hover:text-fg-soft'}`
 
 function toBarTime(timestamp: string): UTCTimestamp {
   return Math.floor(new Date(timestamp).getTime() / 1000) as UTCTimestamp
@@ -105,6 +117,11 @@ export default function PatternAnalysis() {
   const [patternAiLoading, setPatternAiLoading] = useState(false)
 
   const [enabledTools, setEnabledTools] = usePersistedState<string[]>('patterns.enabledTools', [])
+  const [indicatorConfig, setIndicatorConfig] = usePersistedState<IndicatorConfig>('patterns.indicators', {
+    emaPeriods: [20, 50, 200], fibLevels: [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1], fibLookback: 200,
+  })
+  const [showEma, setShowEma] = usePersistedState<boolean>('patterns.showEma', false)
+  const [showFib, setShowFib] = usePersistedState<boolean>('patterns.showFib', false)
   const [toolResults, setToolResults] = useState<AnalysisToolResult[]>([])
   const [toolsLoading, setToolsLoading] = useState(false)
 
@@ -133,6 +150,11 @@ export default function PatternAnalysis() {
   const priceLinesRef = useRef<IPriceLine[]>([])
   const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const rectPrimitiveRef = useRef<RectanglesPrimitive | null>(null)
+  // Indicator overlays (EMA lines + fib price lines) live in their OWN refs —
+  // pattern redraws (lineSeriesRef/priceLinesRef) and indicator redraws must
+  // never delete each other's chart objects.
+  const emaSeriesRef = useRef<ISeriesApi<'Line'>[]>([])
+  const fibLinesRef = useRef<IPriceLine[]>([])
 
   const allCandlesRef = useRef<Candle[]>([])
   const hasMoreRef = useRef(true)
@@ -197,6 +219,55 @@ export default function PatternAnalysis() {
     pageCacheRef.current.set(cacheKey, candles)
     return candles
   }
+
+  // Recomputes EMA line series + fib retracement price lines from whatever
+  // candles are currently loaded. Called on: initial load, older-history
+  // prepend, a NEW live candle appending (not every tick), and config/toggle
+  // changes. Mount-only effects call it through refreshIndicatorsRef so they
+  // always see the latest config instead of the first render's closure.
+  function refreshIndicators() {
+    const chart = chartApiRef.current
+    const candleSeries = candleSeriesRef.current
+    if (!chart || !candleSeries) return
+    emaSeriesRef.current.forEach(s => { try { chart.removeSeries(s) } catch { /* already gone */ } })
+    emaSeriesRef.current = []
+    fibLinesRef.current.forEach(l => { try { candleSeries.removePriceLine(l) } catch { /* already gone */ } })
+    fibLinesRef.current = []
+    const candles = allCandlesRef.current
+    if (candles.length === 0) return
+    if (showEma) {
+      const closes = candles.map(c => c.close)
+      indicatorConfig.emaPeriods.forEach((period, i) => {
+        const ema = computeEma(closes, period)
+        const data: { time: UTCTimestamp; value: number }[] = []
+        for (let j = 0; j < ema.length; j++) {
+          const v = ema[j]
+          if (v !== null) data.push({ time: toBarTime(candles[j].timestamp), value: v })
+        }
+        const series = chart.addSeries(LineSeries, {
+          color: EMA_COLORS[i % EMA_COLORS.length], lineWidth: 1,
+          lastValueVisible: false, priceLineVisible: false,
+        })
+        series.setData(data)
+        emaSeriesRef.current.push(series)
+      })
+    }
+    if (showFib) {
+      const window = candles.slice(-indicatorConfig.fibLookback)
+      const hi = Math.max(...window.map(c => c.high))
+      const lo = Math.min(...window.map(c => c.low))
+      fibLinesRef.current = fibLevels(hi, lo, indicatorConfig.fibLevels).map(({ level, price }) =>
+        candleSeries.createPriceLine({
+          price, color: '#d4af37', lineWidth: 1, lineStyle: 2,
+          axisLabelVisible: true, title: `Fib ${level}`,
+        }))
+    }
+  }
+  const refreshIndicatorsRef = useRef(refreshIndicators)
+  refreshIndicatorsRef.current = refreshIndicators
+
+  // Redraw indicators when their config or visibility toggles change.
+  useEffect(() => { refreshIndicatorsRef.current() }, [indicatorConfig, showEma, showFib])
 
   async function runScan() {
     setLoading(true); setError(''); setAiExplanation(null)
@@ -386,6 +457,7 @@ export default function PatternAnalysis() {
             from: prevRange.from + addedCount, to: prevRange.to + addedCount,
           })
         }
+        refreshIndicatorsRef.current()
         if (older.length < PAGE_CANDLES) hasMoreRef.current = false
       } catch {
         // leave hasMoreRef as-is — next scroll near the edge retries
@@ -458,6 +530,7 @@ export default function PatternAnalysis() {
         //   scrolled down and hunted for them.
         chartApiRef.current?.priceScale('right').applyOptions({ autoScale: true })
         chartApiRef.current?.timeScale().fitContent()
+        refreshIndicatorsRef.current()
         setLoadedCount(candles.length)
         if (candles.length < INITIAL_CANDLES) hasMoreRef.current = false
       } else {
@@ -491,6 +564,8 @@ export default function PatternAnalysis() {
         } else if (new Date(live.timestamp) > new Date(candles[lastIdx].timestamp)) {
           allCandlesRef.current = [...candles, live]
           setLoadedCount(allCandlesRef.current.length)
+          // Only on a NEW candle appending — not every live tick.
+          refreshIndicatorsRef.current()
         }
       } catch {
         // transient network hiccup — next tick retries, nothing to surface
@@ -656,6 +731,9 @@ export default function PatternAnalysis() {
             className="input w-20 cursor-pointer">
             {INTERVALS.map(i => <option key={i}>{i}</option>)}
           </select>
+          <button onClick={() => setShowEma(!showEma)} className={indicatorPill(showEma)}>EMA</button>
+          <button onClick={() => setShowFib(!showFib)} className={indicatorPill(showFib)}>Fib</button>
+          <IndicatorSettings showEma value={indicatorConfig} onChange={setIndicatorConfig} />
           <button onClick={runScan} disabled={loading} className="btn btn-primary">
             {loading ? 'Scanning…' : 'Rescan'}
           </button>
