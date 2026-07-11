@@ -14,7 +14,7 @@ import type { SmcAnalysis } from '../api/client'
 import SymbolSearchInput from '../components/SymbolSearchInput'
 import IndicatorSettings from '../components/IndicatorSettings'
 import type { IndicatorConfig } from '../components/IndicatorSettings'
-import { fibLevels } from '../lib/indicators'
+import { bestPivotTrendline, fibLevels } from '../lib/indicators'
 import { usePersistedState } from '../hooks/usePersistedState'
 import SmcVerdictCard from '../components/smc/SmcVerdictCard'
 import SmcScoreBars from '../components/smc/SmcScoreBars'
@@ -26,7 +26,7 @@ import SmcFreezeBar from '../components/smc/SmcFreezeBar'
 
 const INTERVALS = ['5m', '15m', '30m', '1h', '4h', '1d']
 
-type LayerKey = 'zones' | 'structure' | 'liquidity' | 'sweeps' | 'inducements' | 'equilibrium' | 'plan' | 'swings' | 'volume' | 'fib'
+type LayerKey = 'zones' | 'structure' | 'liquidity' | 'sweeps' | 'inducements' | 'equilibrium' | 'plan' | 'swings' | 'volume' | 'fib' | 'autotrend'
 const LAYER_DEFS: { key: LayerKey; label: string }[] = [
   { key: 'zones', label: 'Zones' }, { key: 'structure', label: 'BOS/CHoCH' },
   { key: 'plan', label: 'Trade plan' }, { key: 'liquidity', label: 'Liquidity' },
@@ -34,11 +34,12 @@ const LAYER_DEFS: { key: LayerKey; label: string }[] = [
   { key: 'sweeps', label: 'Sweeps' },
   { key: 'swings', label: 'Swings' }, { key: 'inducements', label: 'Inducements' },
   { key: 'fib', label: 'Fibonacci' },
+  { key: 'autotrend', label: 'Auto Trend' },
 ]
 const DEFAULT_LAYERS: Record<LayerKey, boolean> = {
   zones: true, structure: true, plan: true, liquidity: true,
   equilibrium: true, sweeps: true, swings: false, inducements: false,
-  volume: true, fib: false,
+  volume: true, fib: false, autotrend: false,
 }
 
 const toSec = (iso: string) => Math.floor(Date.parse(iso) / 1000) as UTCTimestamp
@@ -84,6 +85,7 @@ export default function SmcAnalyzer() {
   const tlKey = `${symbol}_${interval}`
   const trendlines = allTrendlines[tlKey] ?? []
   const [drawMode, setDrawMode] = useState(false)
+  const [pendingSet, setPendingSet] = useState(false)
   const [isFull, setIsFull] = useState(false)
 
   const chartCardRef = useRef<HTMLDivElement>(null)
@@ -95,6 +97,7 @@ export default function SmcAnalyzer() {
   const priceLinesRef = useRef<IPriceLine[]>([])
   const fibLinesRef = useRef<IPriceLine[]>([])
   const trendSeriesRef = useRef<ISeriesApi<'Line'>[]>([])
+  const autoTrendSeriesRef = useRef<ISeriesApi<'Line'>[]>([])
   const pendingPointRef = useRef<{ time: number; price: number } | null>(null)
   const drawModeRef = useRef(false)
   const addTrendlineRef = useRef<(tl: TL) => void>(() => {})
@@ -272,16 +275,37 @@ export default function SmcAnalyzer() {
     chart.timeScale().subscribeVisibleLogicalRangeChange(onRange)
 
     // Trend-line drawing: two clicks (bar-time + price) define a segment.
-    const clickHandler = (param: MouseEventParams) => {
-      if (!drawModeRef.current || !param.point || param.time === undefined) return
-      const price = series.coordinateToPrice(param.point.y)
-      if (price === null) return
-      const pt = { time: param.time as number, price: price as number }
-      if (!pendingPointRef.current) { pendingPointRef.current = pt; return }
+    // Uses raw DOM pointer events on the chart container, NOT the library's
+    // subscribeClick: lightweight-charts swallows a second click that lands
+    // within its double-click window at a different spot (verified live —
+    // neither a click nor a dblclick event fires), which made fast two-click
+    // drawing silently impossible. A <=5px move threshold keeps chart
+    // panning from registering as a draw click.
+    const container = chartRef.current
+    let downPos: { x: number; y: number } | null = null
+    const onPointerDown = (e: PointerEvent) => { downPos = { x: e.clientX, y: e.clientY } }
+    const onPointerUp = (e: PointerEvent) => {
+      const start = downPos
+      downPos = null
+      if (!drawModeRef.current || !start) return
+      if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > 5) return  // drag, not click
+      const rect = container.getBoundingClientRect()
+      const t = chart.timeScale().coordinateToTime(e.clientX - rect.left)
+      const price = series.coordinateToPrice(e.clientY - rect.top)
+      if (t === null || price === null) return
+      const pt = { time: t as number, price: price as number }
+      if (!pendingPointRef.current) {
+        pendingPointRef.current = pt
+        setPendingSet(true)   // visible "point 1 placed" feedback
+        return
+      }
+      if (pt.time === pendingPointRef.current.time) return  // zero-length line
       addTrendlineRef.current({ p1: pendingPointRef.current, p2: pt })
       pendingPointRef.current = null
+      setPendingSet(false)
     }
-    chart.subscribeClick(clickHandler)
+    container.addEventListener('pointerdown', onPointerDown)
+    container.addEventListener('pointerup', onPointerUp)
 
     const resize = () => {
       const full = !!document.fullscreenElement
@@ -297,7 +321,8 @@ export default function SmcAnalyzer() {
       window.removeEventListener('resize', resize)
       document.removeEventListener('fullscreenchange', onFsChange)
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRange)
-      chart.unsubscribeClick(clickHandler)
+      container.removeEventListener('pointerdown', onPointerDown)
+      container.removeEventListener('pointerup', onPointerUp)
       chart.remove()
     }
   }, [])
@@ -375,6 +400,35 @@ export default function SmcAnalyzer() {
       }
     }
     priceLinesRef.current = lines
+
+    // ── Auto trend line — classical rules: a straight line through swing
+    // pivots (rising lows = up line, falling highs = down line), at least 2
+    // touches, and price never closing through it. Best candidate = most
+    // pivot touches, then most recent anchor. Tolerance is ATR-scaled so
+    // wicks don't disqualify an otherwise perfect line.
+    autoTrendSeriesRef.current.forEach(sr => { try { chart.removeSeries(sr) } catch { /* gone */ } })
+    autoTrendSeriesRef.current = []
+    if (layerOn('autotrend')) {
+      const tol = (analysis.atr || 0) * 0.25
+      const barsForFit = candles.map(c => ({ high: c.high, low: c.low }))
+      const lowPivots = analysis.swings.filter(sw => !sw.is_high).map(sw => ({ index: sw.index, price: sw.price }))
+      const highPivots = analysis.swings.filter(sw => sw.is_high).map(sw => ({ index: sw.index, price: sw.price }))
+      const drawFit = (fit: ReturnType<typeof bestPivotTrendline>, color: string) => {
+        if (!fit) return
+        const sr = chart.addSeries(LineSeries, {
+          color, lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
+        })
+        // Two points only — a perfectly straight line, extended from the
+        // first anchor all the way to the latest candle.
+        sr.setData([
+          { time: toSec(candles[fit.i1].time), value: fit.price1 },
+          { time: toSec(candles[candles.length - 1].time), value: fit.endValue },
+        ])
+        autoTrendSeriesRef.current.push(sr)
+      }
+      drawFit(bestPivotTrendline(barsForFit, lowPivots, 'support', tol), '#2ebd85')
+      drawFit(bestPivotTrendline(barsForFit, highPivots, 'resistance', tol), '#f6465d')
+    }
 
     // ── Fibonacci retracement: most recent swing high → most recent swing low ──
     fibLinesRef.current.forEach(l => series.removePriceLine(l))
@@ -506,7 +560,7 @@ export default function SmcAnalyzer() {
                 <IndicatorSettings value={indicatorConfig} onChange={setIndicatorConfig} />
                 {loadingOlder && <span className="text-[10px] text-accent ml-1">loading history…</span>}
                 <div className="ml-auto flex items-center gap-1.5">
-                  <button onClick={() => setDrawMode(d => !d)} className={pill(drawMode)}>
+                  <button onClick={() => { setDrawMode(d => !d); pendingPointRef.current = null; setPendingSet(false) }} className={pill(drawMode)}>
                     <span className="flex items-center gap-1"><Pencil size={10} aria-label="draw" /> Trend line</span>
                   </button>
                   {trendlines.length > 0 && (
@@ -524,7 +578,7 @@ export default function SmcAnalyzer() {
               </div>
             )}
             {drawMode && (
-              <p className="text-[11px] text-accent/80 px-1 pb-1">Click two points on the chart to draw a trend line.</p>
+              <p className="text-[11px] text-accent/80 px-1 pb-1">{pendingSet ? 'Point 1 placed — click the second point to finish the line.' : 'Click two points on the chart to draw a trend line.'}</p>
             )}
             <div ref={chartRef} />
             {analysis && (
