@@ -370,7 +370,7 @@ export default function PatternAnalysis() {
   useEffect(() => {
     if (!chartRef.current) return
     const chart = createChart(chartRef.current, {
-      layout: { background: { type: ColorType.Solid, color: '#11141b' }, textColor: '#5c6475' },
+      layout: { background: { type: ColorType.Solid, color: '#11141b' }, textColor: '#5c6475', attributionLogo: false },
       grid: { vertLines: { color: '#1a1f2b' }, horzLines: { color: '#1a1f2b' } },
       timeScale: { borderColor: '#232837' },
       rightPriceScale: { borderColor: '#232837' },

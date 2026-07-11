@@ -393,6 +393,9 @@ export const placePaperOrder = (body: {
   entry: number; stop_loss: number; take_profit: number; interval?: string; risk_percent?: number
 }) => api.post<ManualOrder>('/paper/order', body)
 
+export const closeManualOrder = (id: number) =>
+  api.post<ManualOrder>(`/paper/orders/${id}/close`)
+
 export const getManualOrders = () =>
   api.get<ManualPaperStatus>('/paper/orders')
 

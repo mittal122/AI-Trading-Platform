@@ -60,6 +60,16 @@ def get_manual_orders() -> ManualPaperStatus:
     return ManualPaperFactory.get_trader().status()
 
 
+@router.post("/orders/{order_id}/close", response_model=ManualOrder)
+async def close_manual_order(order_id: int) -> ManualOrder:
+    """Close an open paper order immediately at the current market price
+    (the X button in the UI) — books PnL exactly like an SL/TP close."""
+    try:
+        return await ManualPaperFactory.get_trader().close_now(order_id, reason="MANUAL_CLOSE")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.websocket("/ws")
 async def paper_status_ws(websocket: WebSocket) -> None:
     """Push live paper-trading status every 2s while the socket is open."""

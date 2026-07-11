@@ -97,6 +97,7 @@ body {
     color: var(--color-fg-soft);
     font-size: 12.5px; font-weight: 500;
     cursor: pointer; user-select: none;
+    white-space: nowrap; /* a button label must never wrap out of its box */
     transition: color 150ms, background 150ms, border-color 150ms;
   }
   .btn:hover { color: var(--color-fg); border-color: #3d465c; background: #1c2130; }

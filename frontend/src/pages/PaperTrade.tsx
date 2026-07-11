@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { RadioTower, RefreshCw, AlertTriangle, Check, ArrowRight } from 'lucide-react'
-import { getPaperStatus, startPaper, stopPaper, getManualOrders, getTradeHistory, getLiveMarket, placePaperOrder } from '../api/client'
+import { RadioTower, RefreshCw, AlertTriangle, Check, ArrowRight, X } from 'lucide-react'
+import { getPaperStatus, startPaper, stopPaper, getManualOrders, getTradeHistory, getLiveMarket, placePaperOrder, closeManualOrder } from '../api/client'
 import type { PaperStatus, ManualPaperStatus, ManualOrder, TradeHistoryItem } from '../api/client'
 import SymbolSearchInput from '../components/SymbolSearchInput'
 import { usePersistedState } from '../hooks/usePersistedState'
@@ -46,6 +46,7 @@ export default function PaperTrade() {
   const [targetPrice, setTargetPrice] = useState('')
   const [riskPercent, setRiskPercent] = useState('1.0')
   const [placing, setPlacing] = useState(false)
+  const [closingId, setClosingId] = useState<number | null>(null)
   const [placeResult, setPlaceResult] = useState<{ ok: boolean; msg: string } | null>(null)
 
   // Live market price for the selected symbol — the Entry field auto-fills
@@ -110,6 +111,15 @@ export default function PaperTrade() {
 
   async function refreshManual() {
     try { setManual((await getManualOrders()).data) } catch {}
+  }
+
+  async function handleCloseOrder(id: number) {
+    setClosingId(id)
+    try {
+      await closeManualOrder(id)
+      await Promise.all([refreshManual(), refreshPersistedHistory()])
+    } catch { /* order may have just closed itself — the refresh shows reality */ }
+    setClosingId(null)
   }
 
   async function refreshPersistedHistory() {
@@ -286,6 +296,29 @@ export default function PaperTrade() {
         </div>
       </div>
 
+      {/* Paper account — the wallet behind ALL manual/one-click/auto-test
+          orders (ManualPaperTrader). This is where "did my paper trades make
+          money" actually lives; the auto-bot below has its own wallet. */}
+      {manual && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {(() => {
+            const start = manual.balance - manual.realized_pnl
+            const ret = start > 0 ? ((manual.equity - start) / start) * 100 : 0
+            return [
+              { label: 'Account Equity', value: `$${manual.equity.toLocaleString(undefined, { maximumFractionDigits: 2 })}` },
+              { label: 'Account Balance', value: `$${manual.balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}` },
+              { label: 'Total Realized PnL', value: `${manual.realized_pnl >= 0 ? '+' : '-'}$${Math.abs(manual.realized_pnl).toFixed(2)}`, color: pnlCls(manual.realized_pnl) },
+              { label: 'Total Return', value: `${ret >= 0 ? '+' : ''}${ret.toFixed(2)}%`, color: pnlCls(ret) },
+            ].map(m => (
+              <div key={m.label} className="card px-3 py-2.5">
+                <p className="panel-title mb-1">{m.label}</p>
+                <p className={`num text-[15px] font-semibold leading-tight ${m.color ?? 'text-fg'}`}>{m.value}</p>
+              </div>
+            ))
+          })()}
+        </div>
+      )}
+
       {/* Strategy auto-bot — the server-side engine that trades a strategy's
           signals automatically on every closed candle */}
       <div className="card">
@@ -370,13 +403,15 @@ export default function PaperTrade() {
             )}
           </div>
 
-          {/* Metrics */}
+          {/* Metrics — the BOT's own wallet only (separate from the paper
+              account strip above), so an idle bot showing $10,000 / $0.00 is
+              expected, not a bug. */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
-              { label: 'Equity',       value: `$${status.equity.toLocaleString()}` },
-              { label: 'Cash',         value: `$${status.cash.toLocaleString()}` },
-              { label: 'Realized PnL', value: `$${status.realized_pnl.toFixed(2)}`, color: pnlCls(status.realized_pnl) },
-              { label: 'Total Return', value: `${status.total_return >= 0 ? '+' : ''}${status.total_return.toFixed(2)}%`, color: pnlCls(status.total_return) },
+              { label: 'Bot Equity',       value: `$${status.equity.toLocaleString()}` },
+              { label: 'Bot Cash',         value: `$${status.cash.toLocaleString()}` },
+              { label: 'Bot Realized PnL', value: `$${status.realized_pnl.toFixed(2)}`, color: pnlCls(status.realized_pnl) },
+              { label: 'Bot Return', value: `${status.total_return >= 0 ? '+' : ''}${status.total_return.toFixed(2)}%`, color: pnlCls(status.total_return) },
             ].map(m => (
               <div key={m.label} className="card px-3 py-2.5">
                 <p className="panel-title mb-1">{m.label}</p>
@@ -436,6 +471,7 @@ export default function PaperTrade() {
                       <th className="th text-right">R/R</th>
                       <th className="th text-right">PnL</th>
                       <th className="th text-right">Status</th>
+                      <th className="th text-right">Close</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -453,6 +489,14 @@ export default function PaperTrade() {
                             {o.unrealized_pnl >= 0 ? '+' : ''}${o.unrealized_pnl.toFixed(2)} ({pct >= 0 ? '+' : ''}{pct.toFixed(2)}%)
                           </td>
                           <td className="td text-right"><span className="chip chip-warn">MONITORING</span></td>
+                          <td className="td text-right">
+                            <button onClick={() => handleCloseOrder(o.id)} disabled={closingId === o.id}
+                              aria-label={`Close order ${o.id} at market price`}
+                              title="Close now at market price"
+                              className="btn btn-danger-outline !h-6 !px-1.5">
+                              <X size={12} aria-hidden />
+                            </button>
+                          </td>
                         </tr>
                       )
                     })}

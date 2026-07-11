@@ -6,11 +6,13 @@ import {
 import type { LucideIcon } from 'lucide-react'
 
 const LINKS: { to: string; label: string; icon: LucideIcon; end?: boolean }[] = [
+  // `end` wherever a path is a prefix of another route — without it /patterns
+  // lights up on /patterns/dashboard too (two tabs active at once).
   { to: '/',                  label: 'Terminal',  icon: CandlestickChart, end: true },
-  { to: '/patterns',          label: 'Analysis',  icon: ScanSearch },
+  { to: '/patterns',          label: 'Analysis',  icon: ScanSearch, end: true },
   { to: '/patterns/dashboard', label: 'Patterns', icon: LayoutGrid },
   { to: '/smc',               label: 'SMC',       icon: Layers, end: true },
-  { to: '/smc/autotest',      label: 'Auto-Test', icon: Repeat2 },
+  { to: '/smc/autotest',      label: 'AutoTest',  icon: Repeat2 },
   { to: '/backtest',          label: 'Backtest',  icon: FlaskConical },
   { to: '/paper',             label: 'Paper',     icon: NotebookPen },
   { to: '/portfolio',         label: 'Portfolio', icon: PieChart },
@@ -47,7 +49,7 @@ function RailLink({ to, label, icon: Icon, end }: { to: string; label: string; i
         <>
           {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-0.5 rounded-r bg-accent" />}
           <Icon size={18} strokeWidth={1.75} />
-          <span className="text-[9px] font-medium leading-none tracking-wide">{label}</span>
+          <span className="text-[9px] font-medium leading-none tracking-wide whitespace-nowrap">{label}</span>
         </>
       )}
     </NavLink>
