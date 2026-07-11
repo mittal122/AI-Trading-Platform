@@ -78,7 +78,11 @@ Endpoints (actual paths — verified against running server):
 - GET  /strategy/scan       — every registered strategy analyzed independently on one symbol/interval → list[TradingSignal]
 - GET  /strategy/multi-timeframe — one strategy analyzed independently across multiple timeframes → list[TradingSignal]
 - GET  /strategy/available  — {"strategies": [...]} — factory's key list, single source of truth
-- GET  /portfolio/analytics — Sharpe/Sortino/Calmar/etc.
+- GET  /portfolio/analytics — Sharpe/Sortino/Calmar/etc. from a FRESH SIMULATED
+      backtest run of one strategy (not the user's record)
+- GET  /portfolio/analytics/history — same metrics computed from the REAL
+      recorded trades in the DB (filters: mode, symbol, strategy; mode omitted
+      = PAPER+LIVE only). This is what the Portfolio page shows.
 - GET  /trades/history      — persisted trade history (filter: symbol, strategy, mode, limit, offset)
 - GET  /trades/backtest-history + POST /trades/backtest-record
 - POST /paper/start, /paper/stop · GET /paper/status · WS /paper/ws (2s status stream)

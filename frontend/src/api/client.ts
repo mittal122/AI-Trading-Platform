@@ -341,6 +341,11 @@ export const getPortfolioAnalytics = (
     params: { strategy, symbol, interval, limit }
   })
 
+// Analytics from the REAL recorded trades in the DB (what actually happened),
+// not a simulated backtest run. mode omitted = PAPER + LIVE only.
+export const getHistoryAnalytics = (params: { mode?: string; strategy?: string; symbol?: string }) =>
+  api.get<PortfolioAnalytics>('/portfolio/analytics/history', { params })
+
 export const getTradeHistory = (params: {
   symbol?: string; strategy?: string; mode?: string
   limit?: number; offset?: number

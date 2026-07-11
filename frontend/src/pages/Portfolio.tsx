@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
-import { getPortfolioAnalytics, getTradeHistory } from '../api/client'
+import { useEffect, useMemo, useState } from 'react'
+import { getHistoryAnalytics, getTradeHistory } from '../api/client'
 import type { TradeHistoryItem, PortfolioAnalytics } from '../api/client'
+import LoadingOverlay from '../components/LoadingOverlay'
 
-const STRATEGIES = ['rsi', 'ema', 'macd', 'breakout', 'supertrend', 'cta_trend', 'turtle', 'engulfing_scalp']
 const MODES = ['', 'PAPER', 'LIVE', 'BACKTEST']
 
 const signCls = (v: number) => (v >= 0 ? 'text-up' : 'text-down')
@@ -13,15 +13,22 @@ export default function Portfolio() {
   const [trades, setTrades]       = useState<TradeHistoryItem[]>([])
   const [total, setTotal]         = useState(0)
   const [loading, setLoading]     = useState(true)
-  const [strategy, setStrategy]   = useState('rsi')
+  // '' = all strategies. The pill list is discovered from the actual trade
+  // rows (real recorded values like 'smc', 'Supertrend', 'manual') — not a
+  // hardcoded list that can drift from what's really in the DB.
+  const [strategy, setStrategy]   = useState('')
   const [modeFilter, setModeFilter] = useState('')
 
   async function load() {
     setLoading(true)
     try {
+      const params = {
+        mode: modeFilter || undefined,
+        strategy: strategy || undefined,
+      }
       const [anlRes, trdRes] = await Promise.all([
-        getPortfolioAnalytics(strategy, 'BTCUSDT', '5m', 300),
-        getTradeHistory({ mode: modeFilter || undefined, limit: 50 }),
+        getHistoryAnalytics(params),
+        getTradeHistory({ ...params, limit: 50 }),
       ])
       setAnalytics(anlRes.data)
       setTrades(trdRes.data.trades)
@@ -32,27 +39,45 @@ export default function Portfolio() {
 
   useEffect(() => { load() }, [strategy, modeFilter])
 
+  const strategyOptions = useMemo(() => {
+    const seen = new Set(trades.map(t => t.strategy))
+    if (strategy) seen.add(strategy) // keep the active pill visible even if filtered rows shrink
+    return ['', ...[...seen].sort()]
+  }, [trades, strategy])
+
   return (
-    <div className="p-3 space-y-3 max-w-[1800px] mx-auto">
-      {/* Strategy selector toolbar */}
+    <div className="relative p-3 space-y-3 max-w-[1800px] mx-auto">
+      <LoadingOverlay show={loading} label="Loading your trading record…" />
+
+      {/* Filters — these drive BOTH the stats and the table (real data only) */}
       <div className="card flex items-center gap-2 px-3 py-2 flex-wrap">
-        <span className="panel-title mr-1">Strategy</span>
-        {STRATEGIES.map(s => (
-          <button key={s} onClick={() => setStrategy(s)}
+        <span className="panel-title mr-1">Account</span>
+        {MODES.map(m => (
+          <button key={m} onClick={() => setModeFilter(m)}
+            className={`h-6 px-2 rounded text-[11px] font-medium cursor-pointer transition-colors ${modeFilter === m
+              ? 'bg-accent-soft text-accent'
+              : 'text-fg-faint hover:text-fg-soft hover:bg-raised'
+            }`}>{m || 'Paper + Live'}</button>
+        ))}
+        <span className="panel-title ml-3 mr-1">Strategy</span>
+        {strategyOptions.map(s => (
+          <button key={s || 'all'} onClick={() => setStrategy(s)}
             className={`h-6 px-2 rounded text-[11px] font-medium cursor-pointer transition-colors ${strategy === s
               ? 'bg-accent-soft text-accent'
               : 'text-fg-faint hover:text-fg-soft hover:bg-raised'
-            }`}>{s}</button>
+            }`}>{s || 'All'}</button>
         ))}
       </div>
 
-      {loading ? (
-        <p className="text-fg-faint text-xs px-1">Loading analytics…</p>
-      ) : analytics ? (
+      {analytics && (
         <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
           <Stat label="Total Return" value={signed(analytics.total_return, '%')}
             valueCls={signCls(analytics.total_return)}
-            sub={`$${analytics.initial_balance.toLocaleString()} → $${analytics.ending_balance.toLocaleString()}`} />
+            sub={`$${analytics.initial_balance.toLocaleString(undefined, { maximumFractionDigits: 2 })} → $${analytics.ending_balance.toLocaleString(undefined, { maximumFractionDigits: 2 })}`} />
+          <Stat label="Realized PnL"
+            value={`${analytics.ending_balance >= analytics.initial_balance ? '+' : '-'}$${Math.abs(analytics.ending_balance - analytics.initial_balance).toFixed(2)}`}
+            valueCls={signCls(analytics.ending_balance - analytics.initial_balance)}
+            sub={`${analytics.total_trades} closed trades`} />
           <Stat label="Win Rate" value={`${analytics.win_rate.toFixed(1)}%`}
             sub={`${analytics.winning_trades}W / ${analytics.losing_trades}L`} />
           <Stat label="Profit Factor"
@@ -60,33 +85,24 @@ export default function Portfolio() {
             valueCls={analytics.profit_factor == null || analytics.profit_factor >= 1 ? 'text-up' : 'text-down'} />
           <Stat label="Max Drawdown" value={`${analytics.max_drawdown.toFixed(2)}%`}
             valueCls={analytics.max_drawdown > 0 ? 'text-down' : undefined} />
+          <Stat label="Expectancy" value={`$${analytics.expectancy.toFixed(2)}`}
+            valueCls={signCls(analytics.expectancy)} sub="per trade" />
           <Stat label="Sharpe Ratio" value={analytics.sharpe_ratio.toFixed(3)}
             valueCls={signCls(analytics.sharpe_ratio)} />
           <Stat label="Sortino Ratio" value={analytics.sortino_ratio.toFixed(3)}
             valueCls={signCls(analytics.sortino_ratio)} />
           <Stat label="Calmar Ratio" value={analytics.calmar_ratio.toFixed(3)}
             valueCls={signCls(analytics.calmar_ratio)} />
-          <Stat label="Expectancy" value={`$${analytics.expectancy.toFixed(2)}`}
-            valueCls={signCls(analytics.expectancy)} sub="per trade" />
           <Stat label="Total Trades" value={String(analytics.total_trades)} />
           <Stat label="Avg Win" value={`$${analytics.avg_win.toFixed(2)}`} valueCls="text-up" />
           <Stat label="Avg Loss" value={`$${analytics.avg_loss.toFixed(2)}`} valueCls="text-down" />
         </div>
-      ) : null}
+      )}
 
       {/* Trade history */}
       <section className="card">
         <header className="flex items-center justify-between px-3 pt-3 pb-2">
           <h2 className="panel-title">Trade History <span className="num text-fg-faint">({total})</span></h2>
-          <div className="flex items-center gap-1">
-            {MODES.map(m => (
-              <button key={m} onClick={() => setModeFilter(m)}
-                className={`h-5 px-1.5 rounded text-[10px] font-medium cursor-pointer transition-colors ${modeFilter === m
-                  ? 'bg-accent-soft text-accent'
-                  : 'text-fg-faint hover:text-fg-soft'
-                }`}>{m || 'All'}</button>
-            ))}
-          </div>
         </header>
         <div className="overflow-x-auto pb-1.5">
           {trades.length === 0 ? (
