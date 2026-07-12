@@ -62,8 +62,11 @@ ENV PYTHONUNBUFFERED=1
 
 # Run as an unprivileged user, not root — a container escape from an app
 # running as root maps to root on the host in many configurations.
+# USER must be the NUMERIC uid (not the name): Kubernetes runAsNonRoot can
+# only verify numeric users — a named USER fails admission with
+# "cannot verify user is non-root" even though it is.
 RUN useradd --create-home --uid 10001 appuser && chown -R appuser /app
-USER appuser
+USER 10001:10001
 
 EXPOSE 8000
 
