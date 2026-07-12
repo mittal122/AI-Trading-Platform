@@ -100,6 +100,27 @@ ships **without PyTorch/Kronos** (~840MB): the `/prediction` endpoint returns
 Docker, rebuild with `--build-arg INSTALL_KRONOS=true` (CPU-only torch,
 ~2.3GB) and set `KRONOS_ENABLED=true` in `.env`.
 
+### Any PC, no source build (prebuilt images)
+
+Images are published on Docker Hub
+([`mittal122/ai-trading-backend`](https://hub.docker.com/r/mittal122/ai-trading-backend),
+[`mittal122/ai-trading-frontend`](https://hub.docker.com/r/mittal122/ai-trading-frontend)),
+so any machine with Docker installed can run the platform without Python,
+Node, a GPU, or the Kronos repo:
+
+```bash
+git clone https://github.com/mittal122/AI-Trading-Platform.git
+cd AI-Trading-Platform
+cp .env.example .env       # then set JWT_SECRET and POSTGRES_PASSWORD
+docker compose pull        # downloads prebuilt images — no build step
+docker compose up -d
+```
+
+Open **http://localhost**. Generate the two secrets with
+`python -c "import secrets; print(secrets.token_urlsafe(48))"` (or any long
+random strings). `NVIDIA_API_KEY` is optional — AI explanations switch on
+when it's set.
+
 ## Configuration
 
 All settings live in `.env` (see `.env.example` for the full annotated list).
