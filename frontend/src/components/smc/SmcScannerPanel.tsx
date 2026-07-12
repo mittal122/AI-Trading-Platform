@@ -86,7 +86,7 @@ export default function SmcScannerPanel() {
       {/* Watchlist */}
       <div>
         <div className="flex items-center gap-2 mb-2">
-          <div className="w-40"><SymbolSearchInput value={addSym} onChange={setAddSym} /></div>
+          <div className="w-40"><SymbolSearchInput value={addSym} onCommit={setAddSym} /></div>
           <select value={addInt} onChange={e => setAddInt(e.target.value)}
             className="input w-20 text-xs">
             {INTERVALS.map(i => <option key={i} value={i}>{i}</option>)}

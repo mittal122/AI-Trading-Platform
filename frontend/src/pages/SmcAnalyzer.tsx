@@ -4,7 +4,6 @@ import {
 } from 'lightweight-charts'
 import type {
   IChartApi, ISeriesApi, IPriceLine, ISeriesMarkersPluginApi, LogicalRange, Time, UTCTimestamp,
-  MouseEventParams,
 } from 'lightweight-charts'
 import { Circle, Maximize2, Minimize2, Pencil } from 'lucide-react'
 import { RectanglesPrimitive } from '../lib/rectanglePrimitive'
@@ -523,7 +522,7 @@ export default function SmcAnalyzer() {
           <span className="text-[11px] text-fg-faint">structure, zones & a rules-based trade plan</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-44"><SymbolSearchInput value={symbol} onChange={setSymbol} /></div>
+          <div className="w-44"><SymbolSearchInput value={symbol} onCommit={setSymbol} /></div>
           <select value={interval} onChange={e => setInterval(e.target.value)}
             className="input w-20 text-xs">
             {INTERVALS.map(i => <option key={i} value={i}>{i}</option>)}
