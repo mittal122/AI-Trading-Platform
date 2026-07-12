@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { RadioTower, RefreshCw, AlertTriangle, Check, ArrowRight, X } from 'lucide-react'
-import { getPaperStatus, startPaper, stopPaper, getManualOrders, getTradeHistory, getLiveMarket, placePaperOrder, closeManualOrder } from '../api/client'
+import { getPaperStatus, startPaper, stopPaper, getManualOrders, getTradeHistory, getLiveMarket, placePaperOrder, closeManualOrder, API_BASE_URL } from '../api/client'
 import type { PaperStatus, ManualPaperStatus, ManualOrder, TradeHistoryItem } from '../api/client'
 import SymbolSearchInput from '../components/SymbolSearchInput'
 import { usePersistedState } from '../hooks/usePersistedState'
@@ -161,8 +161,13 @@ export default function PaperTrade() {
     }
 
     try {
-      const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-      const ws = new WebSocket(`${proto}://${location.host}/api/v1/paper/ws`)
+      // Direct-backend mode (VITE_API_BASE_URL set): connect the socket to the
+      // backend host itself — proxies like Vercel rewrites don't carry WS.
+      // Same-origin mode: use the page's host (Vite/nginx proxy handles it).
+      const wsUrl = API_BASE_URL
+        ? `${API_BASE_URL.replace(/^http/, 'ws')}/api/v1/paper/ws`
+        : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/v1/paper/ws`
+      const ws = new WebSocket(wsUrl)
       wsRef.current = ws
 
       ws.onopen = () => setLive(true)

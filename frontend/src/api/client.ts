@@ -1,8 +1,20 @@
 import axios from 'axios'
 
+// Where the backend lives. Empty (default) = same origin — the dev Vite
+// proxy, the Docker nginx proxy, and Vercel's /api rewrite all serve the API
+// on the page's own host. Set VITE_API_BASE_URL (e.g. an ngrok/Cloudflare
+// tunnel URL) only for direct cross-origin mode — the backend must then list
+// the frontend's origin in CORS_ALLOWED_ORIGINS.
+export const API_BASE_URL: string =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ?? ''
+
 export const api = axios.create({
-  baseURL: '/api/v1',
+  baseURL: `${API_BASE_URL}/api/v1`,
   timeout: 30000,
+  // ngrok's free tier answers browser-looking requests with an interstitial
+  // page instead of the API; this header opts out. Harmless on every other
+  // backend (nginx/Vite proxy just forwards it, FastAPI ignores it).
+  headers: { 'ngrok-skip-browser-warning': 'true' },
 })
 
 // Admin token for money-critical endpoints (exchange keys, live trading,

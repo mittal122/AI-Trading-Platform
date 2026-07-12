@@ -121,6 +121,12 @@ Open **http://localhost**. Generate the two secrets with
 random strings). `NVIDIA_API_KEY` is optional — AI explanations switch on
 when it's set.
 
+### Share it publicly (frontend on Vercel, backend on your PC)
+
+The frontend can be hosted on Vercel while the backend stays on your own
+machine behind an ngrok/Cloudflare tunnel — no port forwarding needed.
+Full walkthrough: [docs/DEPLOY_VERCEL.md](docs/DEPLOY_VERCEL.md).
+
 ## Configuration
 
 All settings live in `.env` (see `.env.example` for the full annotated list).
