@@ -3,7 +3,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://YOUR-BACKEND-TUNNEL-URL/api/:path*"
+      "destination": "https://lumpiness-abdomen-slouching.ngrok-free.dev/api/:path*"
     },
     {
       "source": "/((?!api/).*)",
