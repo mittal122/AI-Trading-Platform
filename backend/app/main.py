@@ -41,7 +41,10 @@ async def _smc_scanner_loop():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    kronos.load()
+    if kronos is not None:
+        kronos.load()
+    else:
+        print("Kronos disabled (KRONOS_ENABLED=false) — /prediction returns 503")
     await create_tables()
     print("Database tables ready")
 

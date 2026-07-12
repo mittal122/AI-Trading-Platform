@@ -52,6 +52,10 @@ services:
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
       STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO:-}
       STRIPE_PRICE_ENTERPRISE: ${STRIPE_PRICE_ENTERPRISE:-}
+      # Kronos (AI price forecast) is off by default in Docker — the default
+      # image ships without torch. To enable: rebuild the backend with
+      # --build-arg INSTALL_KRONOS=true and set KRONOS_ENABLED=true in .env.
+      KRONOS_ENABLED: ${KRONOS_ENABLED:-false}
       KRONOS_PATH: /kronos
       DEFAULT_MODEL: ${DEFAULT_MODEL:-NeoQuasar/Kronos-small}
       DEFAULT_TOKENIZER: ${DEFAULT_TOKENIZER:-NeoQuasar/Kronos-Tokenizer-base}

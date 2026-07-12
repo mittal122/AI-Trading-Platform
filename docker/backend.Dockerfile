@@ -9,15 +9,31 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY requirements.txt .
 
+# Kronos (the AI price forecaster) is optional in Docker: the image ships
+# WITHOUT torch by default (KRONOS_ENABLED=false at runtime → /prediction
+# returns 503, everything else unaffected). Build with
+#   --build-arg INSTALL_KRONOS=true
+# to bake in CPU-only torch + the Kronos dependency chain, then run with
+# KRONOS_ENABLED=true and the Kronos repo mounted at /kronos.
+ARG INSTALL_KRONOS=false
+
 # The GPU stack (nvidia-*/cuda-*/triton pins) is ~7GB of CUDA libraries that
 # are useless in a container without a GPU runtime — Kronos already falls back
-# to CPU (kronos_service.py checks torch.cuda.is_available()). Install the
-# CPU-only torch wheel from PyTorch's own index and drop the GPU pins.
+# to CPU (kronos_service.py checks torch.cuda.is_available()), so even the
+# opt-in install uses the CPU-only torch wheel from PyTorch's own index.
 RUN python -m venv /opt/venv \
     && grep -viE '^(nvidia-|cuda-|triton==|torch==)' requirements.txt > requirements.cpu.txt \
-    && /opt/venv/bin/pip install --no-cache-dir \
-        torch==2.12.1+cpu --index-url https://download.pytorch.org/whl/cpu \
-    && /opt/venv/bin/pip install --no-cache-dir -r requirements.cpu.txt
+    && if [ "$INSTALL_KRONOS" = "true" ]; then \
+        /opt/venv/bin/pip install --no-cache-dir \
+            torch==2.12.1+cpu --index-url https://download.pytorch.org/whl/cpu; \
+    else \
+        grep -viE '^(sympy|networkx|mpmath|einops|huggingface-hub|hf-xet|safetensors)==' \
+            requirements.cpu.txt > requirements.slim.txt \
+        && mv requirements.slim.txt requirements.cpu.txt; \
+    fi \
+    && /opt/venv/bin/pip install --no-cache-dir -r requirements.cpu.txt \
+    # pip itself is never used at runtime — drop it from the shipped venv
+    && /opt/venv/bin/pip uninstall -y pip
 
 # ── Runtime: slim base + finished venv only (no compilers, no pip cache) ────
 FROM python:3.12-slim
