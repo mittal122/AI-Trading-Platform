@@ -424,8 +424,7 @@ NOT Anthropic/Claude — base_ai.py (old Anthropic-only base class) was removed.
       (it skips per-route dynamic limits entirely). Decorator-per-route is the correct pattern.
 
 - [x] Cloud deployment: Docker + docker-compose
-      backend.Dockerfile, frontend.Dockerfile (multi-stage, nginx), nginx.conf
-      (all at repo root — moved out of docker/ 2026-07-12 by user request)
+      docker/backend.Dockerfile, docker/frontend.Dockerfile (multi-stage, nginx), docker/nginx.conf
       docker-compose.yml — postgres + backend + frontend, all env vars wired
       Run: `docker compose up --build` (needs .env — see .env.example)
       VERIFIED: both images built and run for real — alembic migrations apply, Kronos loads,
