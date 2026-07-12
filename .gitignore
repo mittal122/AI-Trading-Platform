@@ -42,3 +42,6 @@ node_modules/
 
 # Local Kronos model repo clone (auto-downloaded by run.bat)
 Kronos/
+
+# Local working notes — never committed
+HANDOFF.md
