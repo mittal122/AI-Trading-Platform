@@ -1,12 +1,31 @@
+# Never in an image
 .venv
 __pycache__
 *.pyc
 .git
 .gitignore
-frontend/node_modules
-frontend/dist
-trading.db
-*.log
 .env
+trading.db
+*.db
+*.log
+logs/
 .pytest_cache
 tests/
+
+# Frontend artifacts (rebuilt inside the image)
+frontend/node_modules
+frontend/dist
+
+# Docs / tooling — dead weight in the build context
+docs/
+design-system/
+*.md
+.claude/
+scripts/
+run.sh
+run.bat
+requirements-windows.txt
+HANDOFF.md
+
+# Kronos model repo is volume-mounted at runtime, never baked in
+kronos/

@@ -93,7 +93,10 @@ cp .env.example .env   # set JWT_SECRET, POSTGRES_PASSWORD, KRONOS_PATH_HOST
 docker compose up --build
 ```
 
-Open **http://localhost:5173** (nginx on :80 for the Docker build).
+Open **http://localhost** — nginx serves the frontend on :80 and proxies
+`/api` to the backend; Postgres is internal-only. The backend image ships
+CPU-only PyTorch (~2.3GB total, vs ~10GB with the CUDA stack) — Kronos
+runs on CPU inside the container.
 
 ## Configuration
 
