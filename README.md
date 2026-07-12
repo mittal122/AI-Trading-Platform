@@ -94,9 +94,11 @@ docker compose up --build
 ```
 
 Open **http://localhost** — nginx serves the frontend on :80 and proxies
-`/api` to the backend; Postgres is internal-only. The backend image ships
-CPU-only PyTorch (~2.3GB total, vs ~10GB with the CUDA stack) — Kronos
-runs on CPU inside the container.
+`/api` to the backend; Postgres is internal-only. The default backend image
+ships **without PyTorch/Kronos** (~840MB): the `/prediction` endpoint returns
+503 and every other feature works normally. To enable AI price forecasts in
+Docker, rebuild with `--build-arg INSTALL_KRONOS=true` (CPU-only torch,
+~2.3GB) and set `KRONOS_ENABLED=true` in `.env`.
 
 ## Configuration
 

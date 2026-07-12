@@ -1937,6 +1937,49 @@ fixed it rather than rebuilt:
 - Docker deploy needs `.env`: JWT_SECRET, POSTGRES_PASSWORD, KRONOS_PATH_HOST
   (README Quick start corrected — app is at http://localhost, not :5173).
 
+### Kronos made optional + dead-dependency cleanup (2026-07-12, same day)
+
+Follow-up sizing pass, user-approved after a full dependency audit:
+
+- **Kronos is a built-but-never-consumed feature** (verified by full-repo
+  trace): only `main.py` (startup load), `core/ai.py` (singleton), and
+  `prediction_service.py` → `POST /prediction/predict` touch it. **Zero
+  frontend calls, zero strategy/SMC/pattern/AI-service usage.** It was
+  costing 750MB of torch + slow boots for an endpoint nothing calls.
+- **`KRONOS_ENABLED` env flag** (default **true** — dev behavior unchanged;
+  **false in docker-compose**): `core/ai.py` gates the *import* (torch is
+  imported at kronos_service module level, so the import itself must be
+  conditional), `main.py` skips `load()`, `api/v1/prediction.py` now
+  lazy-instantiates PredictionService (was module-level, which force-loaded
+  the model at import) and returns a clean 503 when disabled. Verified both
+  ways: disabled → whole app imports with `'torch' not in sys.modules`;
+  enabled → `tests/test_prediction_service.py` passes on host (CUDA load).
+- **backend.Dockerfile `ARG INSTALL_KRONOS=false`**: default image also
+  grep-filters the Kronos-only dep chain (sympy/networkx/mpmath/einops/
+  huggingface-hub/hf-xet/safetensors) and never installs torch; build with
+  `--build-arg INSTALL_KRONOS=true` + `KRONOS_ENABLED=true` env to bake the
+  CPU-torch image back. pip uninstalled from the shipped venv (never used at
+  runtime; setuptools kept — some libs import pkg_resources).
+- **requirements.txt: 19 dead pins removed** (124→105) after a
+  **marker-aware audit** (packaging.Requirement, extras excluded):
+  matplotlib+contourpy+cycler+fonttools+kiwisolver+pillow, plotly+narwhals,
+  passlib (bcrypt replaced it in Phase 10 — never reintroduce), pytest+
+  pluggy+iniconfig (tests are plain scripts, zero `import pytest` anywhere),
+  typer+shellingham+rich+markdown-it-py+mdurl+pygments, docstring_parser.
+  AUDIT GOTCHA: einops/huggingface-hub/safetensors/hf-xet/tqdm look unused
+  (no backend imports) but **Kronos's `model/` package imports them** — a
+  naive unused-dep sweep would have broken prediction. Also: naive
+  reverse-dep scans show false blockers (e.g. "pandas requires matplotlib")
+  from optional *extras* — must evaluate markers with `extra=""`.
+- **Frontend: deleted orphaned `TradeTable.tsx`** (zero imports since the
+  Portfolio rewrite). All 8 package.json deps verified used (fontsource via
+  CSS `@import` — grep for `from 'pkg'` misses side-effect/CSS imports).
+- **Result: backend image 2.26GB → 837MB** (frontend unchanged 82.7MB).
+  Boot is instant (no model load). Full endpoint sweep green on the slim
+  stack; `/prediction/predict` returns the intended 503 with a
+  how-to-re-enable message. pandas 3.0.4 pin is a *yanked* version upstream
+  (pip warns at image build) — kept deliberately, it's what dev runs on.
+
 ---
 
 ## Immediate Next Task
