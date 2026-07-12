@@ -38,6 +38,16 @@ RUN python -m venv /opt/venv \
 # ── Runtime: slim base + finished venv only (no compilers, no pip cache) ────
 FROM python:3.12-slim
 
+# Image-scan hardening: apply pending Debian security updates, then drop
+# perl-base — this Python-only image never executes perl (verified: zero
+# reverse-dependencies in the image), and its unpatched CRITICAL CVEs
+# (CVE-2026-42496, CVE-2026-8376) otherwise block deployment at the trivy
+# gate. Remove the purge line once Debian ships a fixed perl-base.
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && dpkg --purge --force-depends --force-remove-essential perl-base \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY --from=builder /opt/venv /opt/venv
