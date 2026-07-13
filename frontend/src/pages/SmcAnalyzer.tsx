@@ -9,11 +9,12 @@ import { Circle, Maximize2, Minimize2, Pencil } from 'lucide-react'
 import { RectanglesPrimitive } from '../lib/rectanglePrimitive'
 import type { RectangleSpec } from '../lib/rectanglePrimitive'
 import { getSmcAnalysis, getLiveMarket, getMarket } from '../api/client'
-import type { SmcAnalysis } from '../api/client'
+import type { SmcAnalysis, SmcTradePlan } from '../api/client'
 import SymbolSearchInput from '../components/SymbolSearchInput'
 import IndicatorSettings from '../components/IndicatorSettings'
 import type { IndicatorConfig } from '../components/IndicatorSettings'
 import { bestPivotTrendline, fibLevels } from '../lib/indicators'
+import { drawLevels, clearSignalLines } from '../lib/signalLines'
 import { usePersistedState } from '../hooks/usePersistedState'
 import SmcVerdictCard from '../components/smc/SmcVerdictCard'
 import SmcScoreBars from '../components/smc/SmcScoreBars'
@@ -95,6 +96,32 @@ export default function SmcAnalyzer() {
   const markersRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const priceLinesRef = useRef<IPriceLine[]>([])
   const fibLinesRef = useRef<IPriceLine[]>([])
+  // Plan levels toggled by clicking a trade-plan card — own ref so the layer
+  // system's redraws (priceLinesRef) never delete them, and vice versa.
+  const planLinesRef = useRef<IPriceLine[]>([])
+  const [planOnChart, setPlanOnChart] = useState<'long' | 'short' | null>(null)
+
+  function clearPlanLines() {
+    clearSignalLines(candleSeriesRef.current, planLinesRef.current)
+    planLinesRef.current = []
+    setPlanOnChart(null)
+  }
+
+  function togglePlanOnChart(plan: SmcTradePlan) {
+    const series = candleSeriesRef.current
+    if (!series) return
+    const wasActive = planOnChart === plan.side
+    clearSignalLines(series, planLinesRef.current)
+    planLinesRef.current = []
+    if (wasActive) { setPlanOnChart(null); return }
+    planLinesRef.current = drawLevels(series, [
+      { price: plan.entry, title: `${plan.side.toUpperCase()} ENTRY`, color: '#f5a623' },
+      { price: plan.stop_loss, title: 'STOP', color: '#f6465d' },
+      { price: plan.take_profit_1, title: 'TP1', color: '#2ebd85' },
+      { price: plan.take_profit_2, title: 'TP2', color: '#2ebd85' },
+    ])
+    setPlanOnChart(plan.side as 'long' | 'short')
+  }
   const trendSeriesRef = useRef<ISeriesApi<'Line'>[]>([])
   const autoTrendSeriesRef = useRef<ISeriesApi<'Line'>[]>([])
   const pendingPointRef = useRef<{ time: number; price: number } | null>(null)
@@ -345,7 +372,11 @@ export default function SmcAnalyzer() {
     const olderPrefix = sameChart
       ? allBarsRef.current.filter(b => (b.time as number) < firstAnalysisTime)
       : []
-    if (!sameChart) hasMoreRef.current = true
+    if (!sameChart) {
+      hasMoreRef.current = true
+      // Plotted plan levels belong to the previous symbol/interval.
+      clearPlanLines()
+    }
     allBarsRef.current = [...olderPrefix, ...analysisBars]
 
     series.setData(allBarsRef.current)
@@ -625,8 +656,14 @@ export default function SmcAnalyzer() {
 
         <div className="space-y-3">
           {analysis?.verdict && <SmcVerdictCard a={analysis} />}
-          {analysis?.long_plan && <SmcTradePlanCard plan={analysis.long_plan} symbol={symbol} interval={interval} />}
-          {analysis?.short_plan && <SmcTradePlanCard plan={analysis.short_plan} symbol={symbol} interval={interval} />}
+          {analysis?.long_plan && (
+            <SmcTradePlanCard plan={analysis.long_plan} symbol={symbol} interval={interval}
+              chartActive={planOnChart === 'long'} onCardClick={togglePlanOnChart} />
+          )}
+          {analysis?.short_plan && (
+            <SmcTradePlanCard plan={analysis.short_plan} symbol={symbol} interval={interval}
+              chartActive={planOnChart === 'short'} onCardClick={togglePlanOnChart} />
+          )}
           {analysis && (
             <p className="text-[11px] text-fg-faint leading-relaxed px-1">
               For research and education only — not financial advice. This is a

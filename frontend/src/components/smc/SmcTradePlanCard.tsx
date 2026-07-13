@@ -30,14 +30,24 @@ function Level({ label, value, color }: { label: string; value: number; color: s
   )
 }
 
-export default function SmcTradePlanCard({ plan, symbol, interval }: {
+export default function SmcTradePlanCard({ plan, symbol, interval, onCardClick, chartActive }: {
   plan: SmcTradePlan; symbol?: string; interval?: string
+  /** When set, clicking the card body toggles this plan's Entry/Stop/TP1/TP2
+   *  lines on the SMC chart (inner buttons are excluded). */
+  onCardClick?: (plan: SmcTradePlan) => void
+  chartActive?: boolean
 }) {
   const isLong = plan.side === 'long'
   const sideColor = isLong ? 'text-up' : 'text-down'
   const conf = plan.confluence
   const [placing, setPlacing] = useState(false)
   const [placed, setPlaced] = useState<string | null>(null)
+
+  function handleCardClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (!onCardClick) return
+    if ((e.target as HTMLElement).closest('button, a, summary, details')) return
+    onCardClick(plan)
+  }
 
   async function paperTrade() {
     if (!symbol) return
@@ -57,11 +67,16 @@ export default function SmcTradePlanCard({ plan, symbol, interval }: {
   }
 
   return (
-    <div className={`card p-4 ${plan.fired ? (isLong ? '!border-up/40' : '!border-down/40') : ''}`}>
+    <div
+      className={`card p-4 ${onCardClick ? 'cursor-pointer' : ''} ${chartActive ? '!border-accent/50' : plan.fired ? (isLong ? '!border-up/40' : '!border-down/40') : ''}`}
+      onClick={handleCardClick}
+      title={onCardClick ? (chartActive ? 'Click to remove levels from chart' : 'Click to plot Entry / Stop / TP levels on the chart') : undefined}
+    >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <span className={`text-sm font-bold uppercase ${sideColor}`}>{plan.side}</span>
           <span className="text-[11px] text-fg-faint">from {plan.source.replace('_', ' ')}</span>
+          {chartActive && <span className="text-[11px] text-accent font-medium">● on chart</span>}
         </div>
         <span className={`chip ${STRENGTH_CHIP[plan.strength]}`}>
           {plan.fired && <Zap size={10} aria-label="fired" />}
