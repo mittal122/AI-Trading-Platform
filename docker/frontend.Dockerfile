@@ -14,5 +14,9 @@ FROM nginxinc/nginx-unprivileged:alpine
 
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+# Rewrites the /api upstream to the namespace-qualified service FQDN when
+# running under Kubernetes (nginx's resolver ignores resolv.conf search
+# domains, so the bare "backend" name only works under Docker DNS).
+COPY --chmod=755 docker/40-k8s-upstream.sh /docker-entrypoint.d/40-k8s-upstream.sh
 
 EXPOSE 8080

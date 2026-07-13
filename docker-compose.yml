@@ -28,7 +28,7 @@ services:
   backend:
     # Published image — a machine without the source code just pulls this.
     # TAG pins the release (never bare "latest" in production).
-    image: mittal122/ai-trading-backend:${TAG:-v1.0.3}
+    image: mittal122/ai-trading-backend:${TAG:-v1.0.4}
     build:
       context: .
       dockerfile: docker/backend.Dockerfile
@@ -79,7 +79,7 @@ services:
     # bypass the reverse proxy and its security headers.
 
   frontend:
-    image: mittal122/ai-trading-frontend:${TAG:-v1.0.3}
+    image: mittal122/ai-trading-frontend:${TAG:-v1.0.4}
     build:
       context: .
       dockerfile: docker/frontend.Dockerfile
