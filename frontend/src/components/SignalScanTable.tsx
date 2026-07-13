@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import type { TradingSignal } from '../api/client'
 
 const DIR_CHIP: Record<string, string> = {
@@ -16,6 +17,11 @@ export default function SignalScanTable({ signals, labelKey, onRowClick }: {
   labelKey: 'strategy' | 'interval'
   onRowClick?: (signal: TradingSignal) => void
 }) {
+  // Weak/FLAT rows hide their levels by default (they're not actionable) —
+  // clicking a row reveals its entry/stop/target anyway, per row.
+  const [revealed, setRevealed] = useState<Set<number>>(new Set())
+  useEffect(() => { setRevealed(new Set()) }, [signals])
+
   if (!signals.length) {
     return <p className="text-fg-faint text-sm text-center py-6">No signals yet</p>
   }
@@ -41,11 +47,16 @@ export default function SignalScanTable({ signals, labelKey, onRowClick }: {
           {signals.map((s, i) => {
             const label = labelKey === 'strategy' ? s.strategy : s.interval
             const actionable = s.direction === 'BUY' || s.direction === 'SELL'
+            const showLevels = actionable || revealed.has(i)
             return (
               <tr
                 key={i}
-                onClick={() => onRowClick?.(s)}
-                className={`${onRowClick ? 'row-hover cursor-pointer' : ''} ${actionable ? '' : 'opacity-60'}`}
+                onClick={() => {
+                  onRowClick?.(s)
+                  setRevealed(prev => new Set(prev).add(i))
+                }}
+                title={showLevels ? undefined : 'Click to show entry / stop / target'}
+                className={`row-hover cursor-pointer ${actionable ? '' : 'opacity-60'}`}
               >
                 <td className="td font-medium text-fg">{label}</td>
                 <td className="td">
@@ -54,10 +65,10 @@ export default function SignalScanTable({ signals, labelKey, onRowClick }: {
                   </span>
                 </td>
                 <td className="td num">{s.confidence.toFixed(1)}%</td>
-                <td className="td num">{s.entry ? `$${s.entry.toFixed(2)}` : '—'}</td>
-                <td className="td num text-down/80">{actionable ? `$${s.stop_loss.toFixed(2)}` : '—'}</td>
-                <td className="td num text-up/80">{actionable ? `$${s.take_profit.toFixed(2)}` : '—'}</td>
-                <td className="td num">{actionable ? `1:${s.risk_reward.toFixed(2)}` : '—'}</td>
+                <td className="td num">{showLevels && s.entry ? `$${s.entry.toFixed(2)}` : '—'}</td>
+                <td className="td num text-down/80">{showLevels && s.stop_loss ? `$${s.stop_loss.toFixed(2)}` : '—'}</td>
+                <td className="td num text-up/80">{showLevels && s.take_profit ? `$${s.take_profit.toFixed(2)}` : '—'}</td>
+                <td className="td num">{showLevels && s.risk_reward ? `1:${s.risk_reward.toFixed(2)}` : '—'}</td>
                 <td className="td num text-accent">{s.eta_display ?? '—'}</td>
                 <td className={`td num font-semibold ${s.quality_grade ? GRADE_COLOR[s.quality_grade] ?? 'text-fg-soft' : 'text-fg-faint'}`}>
                   {s.quality_grade ?? '—'}
