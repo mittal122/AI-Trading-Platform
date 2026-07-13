@@ -1,0 +1,160 @@
+# AI Trading Platform — plain-kubectl deployment (no Helm needed).
+# Secrets are NOT in this file: create them first (see docs/DEPLOY_K8S.md):
+#   kubectl create secret generic aitrading-secrets -n aitrading \
+#     --from-literal=POSTGRES_PASSWORD=... --from-literal=DATABASE_URL=... \
+#     --from-literal=JWT_SECRET=...
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aitrading
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pgdata
+  namespace: aitrading
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: aitrading
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels: { app: postgres }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 70
+      containers:
+        - name: postgres
+          image: mittal122/ai-trading-postgres:17-alpine-r1
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 5432 }]
+          env:
+            - name: POSTGRES_USER
+              value: trading
+            - name: POSTGRES_DB
+              value: trading
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: { name: aitrading-secrets, key: POSTGRES_PASSWORD }
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "trading"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+      volumes:
+        - name: pgdata
+          persistentVolumeClaim: { claimName: pgdata }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: aitrading
+spec:
+  selector: { app: postgres }
+  ports: [{ port: 5432, targetPort: 5432 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: aitrading
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: backend }
+  template:
+    metadata:
+      labels: { app: backend }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: backend
+          image: mittal122/ai-trading-backend:v1.0.4
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8000 }]
+          env:
+            - name: KRONOS_ENABLED
+              value: "false"
+            - name: CORS_ALLOWED_ORIGINS
+              value: "http://localhost"
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef: { name: aitrading-secrets, key: DATABASE_URL }
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef: { name: aitrading-secrets, key: JWT_SECRET }
+          readinessProbe:
+            httpGet: { path: /docs, port: 8000 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 250m, memory: 512Mi }
+            limits: { cpu: "1", memory: 1536Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: aitrading
+spec:
+  selector: { app: backend }
+  ports: [{ port: 8000, targetPort: 8000 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: aitrading
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: frontend }
+  template:
+    metadata:
+      labels: { app: frontend }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: frontend
+          image: mittal122/ai-trading-frontend:v1.0.4
+          imagePullPolicy: IfNotPresent
+          ports: [{ containerPort: 8080 }]
+          readinessProbe:
+            httpGet: { path: /, port: 8080 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 128Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: aitrading
+spec:
+  selector: { app: frontend }
+  ports: [{ port: 8080, targetPort: 8080 }]
