@@ -15,7 +15,13 @@ const GRADE_COLOR: Record<string, string> = {
   C: 'text-accent', D: 'text-down', F: 'text-down',
 }
 
-export default function SignalCard({ signal }: { signal: TradingSignal }) {
+export default function SignalCard({ signal, onCardClick, chartActive }: {
+  signal: TradingSignal
+  /** When set, clicking the card body toggles the signal's Entry/Stop/Target
+   *  lines on the page's chart (inner buttons/links are excluded). */
+  onCardClick?: (signal: TradingSignal) => void
+  chartActive?: boolean
+}) {
   const dir = signal.direction
   const dirChip = DIR_CHIP[dir] ?? DIR_CHIP.FLAT
 
@@ -44,8 +50,20 @@ export default function SignalCard({ signal }: { signal: TradingSignal }) {
     }
   }
 
+  function handleCardClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (!onCardClick) return
+    // Inner interactive elements (paper-trade button, explanation toggle)
+    // keep their own behavior — only clicks on the card body toggle the chart.
+    if ((e.target as HTMLElement).closest('button, summary, a, details')) return
+    onCardClick(signal)
+  }
+
   return (
-    <div className="card">
+    <div
+      className={`card ${onCardClick ? 'cursor-pointer' : ''} ${chartActive ? '!border-accent/50' : ''}`}
+      onClick={handleCardClick}
+      title={onCardClick ? (chartActive ? 'Click to remove levels from chart' : 'Click to plot Entry / Stop / Target on the chart') : undefined}
+    >
       {/* Direction hero */}
       <header className="flex items-center justify-between px-3 pt-3 pb-2">
         <div className="flex items-center gap-2">
@@ -83,6 +101,7 @@ export default function SignalCard({ signal }: { signal: TradingSignal }) {
           {signal.eta_display && (
             <span className="text-fg-faint">ETA <span className="num font-semibold text-accent">{signal.eta_display}</span></span>
           )}
+          {chartActive && <span className="text-accent font-medium">● on chart</span>}
         </div>
 
         {/* Reasons */}

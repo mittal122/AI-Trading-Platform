@@ -19,6 +19,7 @@ import type {
 import IndicatorSettings from '../components/IndicatorSettings'
 import type { IndicatorConfig } from '../components/IndicatorSettings'
 import { computeEma, fibLevels } from '../lib/indicators'
+import { drawSignalLines, clearSignalLines } from '../lib/signalLines'
 import PatternInfoPanel from '../components/PatternInfoPanel'
 import SignalsSection from '../components/SignalsSection'
 import SymbolSearchInput from '../components/SymbolSearchInput'
@@ -155,6 +156,10 @@ export default function PatternAnalysis() {
   // never delete each other's chart objects.
   const emaSeriesRef = useRef<ISeriesApi<'Line'>[]>([])
   const fibLinesRef = useRef<IPriceLine[]>([])
+  // Entry/Stop/Target lines toggled by clicking the signal detail card below —
+  // separate ref so pattern/indicator redraws never delete them (and vice versa).
+  const signalLinesRef = useRef<IPriceLine[]>([])
+  const [signalOnChart, setSignalOnChart] = useState(false)
 
   const allCandlesRef = useRef<Candle[]>([])
   const hasMoreRef = useRef(true)
@@ -508,6 +513,10 @@ export default function PatternAnalysis() {
     loadingMoreRef.current = false
     setHistoryExhausted(false)
     setLoadedCount(0)
+    // Signal levels belong to the previous symbol/interval — drop them.
+    clearSignalLines(candleSeriesRef.current, signalLinesRef.current)
+    signalLinesRef.current = []
+    setSignalOnChart(false)
 
     const requestedSymbol = symbol
     const requestedInterval = interval
@@ -801,7 +810,22 @@ export default function PatternAnalysis() {
 
           {/* Signals — merged in from the standalone Signals page, placed
               directly below Analysis Tools, sharing this page's symbol. */}
-          <SignalsSection symbol={symbol} />
+          <SignalsSection
+            symbol={symbol}
+            signalOnChart={signalOnChart}
+            onSignalCardClick={(sig) => {
+              const series = candleSeriesRef.current
+              if (!series) return
+              if (signalLinesRef.current.length) {
+                clearSignalLines(series, signalLinesRef.current)
+                signalLinesRef.current = []
+                setSignalOnChart(false)
+              } else {
+                signalLinesRef.current = drawSignalLines(series, sig)
+                setSignalOnChart(true)
+              }
+            }}
+          />
         </div>
 
         <div className="space-y-3 xl:sticky xl:top-6">

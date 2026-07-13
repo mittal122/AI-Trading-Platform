@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts'
-import type { ISeriesApi, LogicalRange, UTCTimestamp } from 'lightweight-charts'
+import type { ISeriesApi, IPriceLine, LogicalRange, UTCTimestamp } from 'lightweight-charts'
+import { drawSignalLines, clearSignalLines } from '../lib/signalLines'
 import { Info, X, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import {
   getMarket, getLiveMarket, getIndicators, getSignal,
@@ -56,6 +57,9 @@ const pctText = (p: number) => `${p >= 0 ? '+' : ''}${p.toFixed(2)}%`
 
 export default function Terminal() {
   const chartRef = useRef<HTMLDivElement>(null)
+  const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
+  const signalLinesRef = useRef<IPriceLine[]>([])
+  const [signalOnChart, setSignalOnChart] = useState(false)
   const [symbol, setSymbol] = usePersistedState('dashboard.symbol', 'BTCUSDT')
   const [interval, setInterval_] = usePersistedState('terminal.interval', '5m')
   const [watchlist, setWatchlist] = usePersistedState<string[]>('dashboard.watchlist', DEFAULT_WATCHLIST)
@@ -173,6 +177,9 @@ export default function Terminal() {
         return res
       },
     })
+    candleSeriesRef.current = candleSeries
+    signalLinesRef.current = []
+    setSignalOnChart(false)
 
     let allCandles: Candle[] = []
     let hasMore = true
@@ -252,6 +259,8 @@ export default function Terminal() {
       window.removeEventListener('resize', resize)
       window.clearInterval(liveTimer)
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onVisibleRangeChange)
+      candleSeriesRef.current = null
+      signalLinesRef.current = []
       chart.remove()
     }
   }, [symbol, interval])
@@ -465,7 +474,24 @@ export default function Terminal() {
 
         {/* Right column: signal + movers */}
         <section className="space-y-3">
-          {signal && <SignalCard signal={signal} />}
+          {signal && (
+            <SignalCard
+              signal={signal}
+              chartActive={signalOnChart}
+              onCardClick={(sig) => {
+                const series = candleSeriesRef.current
+                if (!series) return
+                if (signalLinesRef.current.length) {
+                  clearSignalLines(series, signalLinesRef.current)
+                  signalLinesRef.current = []
+                  setSignalOnChart(false)
+                } else {
+                  signalLinesRef.current = drawSignalLines(series, sig)
+                  setSignalOnChart(true)
+                }
+              }}
+            />
+          )}
           {overview && (
             <div className="card">
               <header className="flex items-center gap-1 px-3 pt-3 pb-2">

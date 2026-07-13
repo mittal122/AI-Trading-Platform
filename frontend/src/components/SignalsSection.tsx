@@ -27,7 +27,13 @@ const STRATEGY_LABEL_TO_KEY: Record<string, string> = {
  * standalone Signals page, now embedded in Retail Dashboard (below the
  * Analysis Tools section) and driven by the parent page's own symbol.
  */
-export default function SignalsSection({ symbol }: { symbol: string }) {
+export default function SignalsSection({ symbol, onSignalCardClick, signalOnChart }: {
+  symbol: string
+  /** Parent page's chart hook: clicking the detail card toggles the signal's
+   *  Entry/Stop/Target lines on the chart. */
+  onSignalCardClick?: (signal: TradingSignal) => void
+  signalOnChart?: boolean
+}) {
   const [strategy, setStrategy] = usePersistedState('retailDashboard.strategy', 'rsi')
   const [interval, setInterval] = usePersistedState('retailDashboard.interval', '5m')
 
@@ -147,7 +153,7 @@ export default function SignalsSection({ symbol }: { symbol: string }) {
       {/* Detail — the exact strategy/interval selected above */}
       {loading ? (
         <p className="text-fg-faint text-sm text-center py-6">Loading detail…</p>
-      ) : signal && <SignalCard signal={signal} />}
+      ) : signal && <SignalCard signal={signal} onCardClick={onSignalCardClick} chartActive={signalOnChart} />}
     </div>
   )
 }
