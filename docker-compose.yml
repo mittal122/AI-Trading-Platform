@@ -1,6 +1,12 @@
 services:
   postgres:
-    image: postgres:17-alpine
+    # Hardened postgres:17-alpine — gosu (permanent trivy CRITICAL) replaced
+    # with su-exec, numeric USER 70 for Kubernetes runAsNonRoot. See
+    # docker/postgres.Dockerfile.
+    image: mittal122/ai-trading-postgres:17-alpine-r1
+    build:
+      context: .
+      dockerfile: docker/postgres.Dockerfile
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-trading}
