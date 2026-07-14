@@ -59,6 +59,12 @@ COPY alembic.ini .
 ENV PATH="/opt/venv/bin:$PATH"
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
+# numba (pandas_ta's JIT) needs a writable cache location or it hard-crashes
+# at import under a read-only root filesystem ("no locator available").
+# Point it at /tmp — platforms with readOnlyRootFilesystem mount a writable
+# emptyDir there; if even /tmp is read-only, numba degrades to a warning
+# instead of crashing because a locator now exists.
+ENV NUMBA_CACHE_DIR=/tmp/numba-cache
 
 # Run as an unprivileged user, not root — a container escape from an app
 # running as root maps to root on the host in many configurations.

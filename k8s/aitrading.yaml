@@ -91,7 +91,7 @@ spec:
         runAsNonRoot: true
       containers:
         - name: backend
-          image: mittal122/ai-trading-backend:v1.0.4
+          image: mittal122/ai-trading-backend:v1.0.5
           imagePullPolicy: IfNotPresent
           ports: [{ containerPort: 8000 }]
           env:
@@ -139,7 +139,7 @@ spec:
         runAsNonRoot: true
       containers:
         - name: frontend
-          image: mittal122/ai-trading-frontend:v1.0.4
+          image: mittal122/ai-trading-frontend:v1.0.5
           imagePullPolicy: IfNotPresent
           ports: [{ containerPort: 8080 }]
           readinessProbe:
