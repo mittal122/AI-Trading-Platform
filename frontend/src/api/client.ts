@@ -1,12 +1,19 @@
 import axios from 'axios'
 
 // Where the backend lives. Empty (default) = same origin — the dev Vite
-// proxy, the Docker nginx proxy, and Vercel's /api rewrite all serve the API
-// on the page's own host. Set VITE_API_BASE_URL (e.g. an ngrok/Cloudflare
-// tunnel URL) only for direct cross-origin mode — the backend must then list
-// the frontend's origin in CORS_ALLOWED_ORIGINS.
+// proxy, the Docker nginx proxy, a Kubernetes ingress, and Vercel's /api
+// rewrite all serve the API on the page's own host with relative "/api"
+// calls. Overrides, highest priority first:
+//   1. RUNTIME:  window.__API_BASE__ from /config.js — replaceable at deploy
+//      time (e.g. a ConfigMap mounted over config.js), no rebuild needed.
+//   2. BUILD:    VITE_API_BASE_URL — baked into the bundle at build time.
+// Cross-origin overrides require the backend to list the frontend's origin
+// in CORS_ALLOWED_ORIGINS.
+const runtimeBase =
+  typeof window !== 'undefined' ? (window as { __API_BASE__?: string }).__API_BASE__ : undefined
 export const API_BASE_URL: string =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, '') ?? ''
+  (runtimeBase || (import.meta.env.VITE_API_BASE_URL as string | undefined) || '')
+    .replace(/\/$/, '')
 
 export const api = axios.create({
   baseURL: `${API_BASE_URL}/api/v1`,
