@@ -1,6 +1,22 @@
+from datetime import datetime, timezone
+
 import pandas as pd
 
 from backend.app.core.pattern_config import pattern_config
+
+
+def _to_datetime(raw):
+    """Normalize numpy datetime64's .item() output to a naive-UTC datetime.
+
+    .item() on datetime64[us]/[ms]/[s] returns a datetime, but on [ns] — the
+    dtype real Binance market data actually has — it returns a raw int of
+    nanoseconds (Python datetime can't represent ns). Consumers that
+    .isoformat() the raw int used to leak epoch-ns strings like
+    '1783965600000000000' into API payloads.
+    """
+    if isinstance(raw, int):
+        return datetime.fromtimestamp(raw / 1e9, tz=timezone.utc).replace(tzinfo=None)
+    return raw
 
 
 class SwingPoint:
@@ -40,11 +56,11 @@ class SwingDetector:
         for i in range(lb, n - lb):
             window_high = highs[i - lb: i + lb + 1]
             if highs[i] == window_high.max() and (window_high == highs[i]).sum() == 1:
-                swings.append(SwingPoint(i, times[i].item(), float(highs[i]), "high"))
+                swings.append(SwingPoint(i, _to_datetime(times[i].item()), float(highs[i]), "high"))
 
             window_low = lows[i - lb: i + lb + 1]
             if lows[i] == window_low.min() and (window_low == lows[i]).sum() == 1:
-                swings.append(SwingPoint(i, times[i].item(), float(lows[i]), "low"))
+                swings.append(SwingPoint(i, _to_datetime(times[i].item()), float(lows[i]), "low"))
 
         swings.sort(key=lambda s: s.index)
         return swings

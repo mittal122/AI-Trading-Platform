@@ -87,6 +87,22 @@ def test_synthetic():
           f"trend={result.trend.value} labels={sorted(l.value for l in labels)}")
 
 
+def test_ns_timestamps_serialize_iso():
+    """Real Binance data is datetime64[ns]; numpy's .item() on [ns] returns a
+    raw int (nanoseconds) instead of a datetime, which used to leak epoch-ns
+    strings like '1783965600000000000' into Swing.time — the frontend's
+    Date.parse() then produced NaN and every BOS/CHoCH + HH/HL marker
+    silently vanished from the chart. Times must be ISO on [ns] data too."""
+    df = build_df([("low", 100), ("high", 130), ("low", 110), ("high", 140)])
+    df["timestamps"] = df["timestamps"].astype("datetime64[ns]")
+    swings = find_swings(df)
+    assert len(swings) > 0, "no swings detected"
+    for s in swings:
+        parsed = datetime.fromisoformat(s.time)   # raises on '178396...' strings
+        assert 2020 < parsed.year < 2100, f"nonsense time {s.time}"
+    print(f"PASS ns-dtype: {len(swings)} swings, all times ISO (e.g. {swings[0].time})")
+
+
 def test_live():
     df = MarketService().get_market_data("BTCUSDT", "1h", 300)
     swings = find_swings(df)
@@ -104,5 +120,6 @@ def test_live():
 
 if __name__ == "__main__":
     test_synthetic()
+    test_ns_timestamps_serialize_iso()
     test_live()
     print("A2 OK")

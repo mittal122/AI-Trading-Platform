@@ -4,6 +4,7 @@ from backend.app.core.pattern_config import pattern_config
 from backend.app.schemas.pattern import FairValueGap, FVGType
 from backend.app.services.indicator_service import IndicatorService
 from backend.app.services.pattern.pattern_utils import clamp, make_pattern_id, now_iso
+from backend.app.services.pattern.swing_detector import _to_datetime
 
 
 class FVGDetector:
@@ -58,12 +59,12 @@ class FVGDetector:
             for j in range(i + 1, n):
                 if low[j] <= gap_top and high[j] >= gap_bottom:
                     filled = True
-                    filled_at = times[j].item().isoformat()
+                    filled_at = _to_datetime(times[j].item()).isoformat()
                     break
 
             strength = clamp((gap_size / atr) / cfg.FVG_STRONG_ATR_RATIO * 100)
 
-            formed_at = times[i - 1].item().isoformat()
+            formed_at = _to_datetime(times[i - 1].item()).isoformat()
             gaps.append(
                 FairValueGap(
                     id=make_pattern_id(symbol, interval, f"fvg_{gap_type.value.lower()}", formed_at),

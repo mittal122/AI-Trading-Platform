@@ -430,7 +430,11 @@ export default function SmcAnalyzer() {
     priceLinesRef.current.forEach(l => series.removePriceLine(l))
     const lines: any[] = []
     if (layers.liquidity) {
+      // Two pools can sit at the same price — one line is enough.
+      const seenPools = new Set<number>()
       for (const p of analysis.liquidity_pools) {
+        if (seenPools.has(p.price)) continue
+        seenPools.add(p.price)
         lines.push(series.createPriceLine({
           price: p.price, color: '#5c6475', lineWidth: 1, lineStyle: 2,
           axisLabelVisible: true, title: p.direction === 'BEARISH' ? 'EQH' : 'EQL',
@@ -484,20 +488,27 @@ export default function SmcAnalyzer() {
       drawFit(bestPivotTrendline(barsForFit, highPivots, 'resistance', tol), '#f6465d')
     }
 
-    // ── Fibonacci retracement: most recent swing high → most recent swing low ──
+    // ── Fibonacci retracement over the engine's dealing range ──
+    // The last raw swing pair is often a tiny micro-leg that bunches every
+    // level into a sliver; the dealing range (last major swing high ↔ low)
+    // is the leg SMC actually retraces. Orientation follows the trend: 0
+    // anchors at the move's end (uptrend → high, downtrend → low), so 0.618
+    // reads as "retraced 61.8% of the move" in both directions.
     fibLinesRef.current.forEach(l => series.removePriceLine(l))
     fibLinesRef.current = []
     if (layerOn('fib')) {
       const highs = analysis.swings.filter(s => s.is_high)
       const lows = analysis.swings.filter(s => !s.is_high)
-      const hi = highs[highs.length - 1]?.price
-      const lo = lows[lows.length - 1]?.price
-      if (hi !== undefined && lo !== undefined) {
-        fibLinesRef.current = fibLevels(hi, lo, indicatorConfig.fibLevels).map(({ level, price }) =>
-          series.createPriceLine({
-            price, color: '#d4af37', lineWidth: 1, lineStyle: 2,
-            axisLabelVisible: true, title: `Fib ${level}`,
-          }))
+      const hi = analysis.dealing_range?.range_hi ?? highs[highs.length - 1]?.price
+      const lo = analysis.dealing_range?.range_lo ?? lows[lows.length - 1]?.price
+      if (hi !== undefined && lo !== undefined && hi > lo) {
+        const down = analysis.trend === 'down'
+        fibLinesRef.current = fibLevels(down ? lo : hi, down ? hi : lo, indicatorConfig.fibLevels)
+          .map(({ level, price }) =>
+            series.createPriceLine({
+              price, color: '#d4af37', lineWidth: 1, lineStyle: 2,
+              axisLabelVisible: true, title: `Fib ${level}`,
+            }))
       }
     }
 
