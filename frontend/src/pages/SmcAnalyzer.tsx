@@ -151,7 +151,12 @@ export default function SmcAnalyzer() {
     if (!isQuiet) setLoading(true)
     setError(null)
     try {
-      const { data } = await getSmcAnalysis(symbol, interval, 500)
+      // Analysis window follows the loaded history: scrolling back loads more
+      // candles, and the next analysis covers them too — swings/BOS/zones/fib
+      // are computed over everything on the chart, not just the latest 500.
+      const sameChart = chartSymbolRef.current === symbol && chartIntervalRef.current === interval
+      const limit = Math.min(Math.max(sameChart ? allBarsRef.current.length : 0, 500), 2000)
+      const { data } = await getSmcAnalysis(symbol, interval, limit)
       setAnalysis(data)
     } catch (e: any) {
       if (!isQuiet) {
@@ -198,6 +203,7 @@ export default function SmcAnalyzer() {
   const allBarsRef = useRef<Bar[]>([])
   const hasMoreRef = useRef(true)
   const loadingMoreRef = useRef(false)
+  const rescanTimerRef = useRef<number | null>(null)
   const [loadingOlder, setLoadingOlder] = useState(false)
 
   const volBar = (b: Bar) => ({
@@ -238,6 +244,12 @@ export default function SmcAnalyzer() {
         })
       }
       if (older.length < 500) hasMoreRef.current = false
+      // Re-analyze (debounced, quiet) so structure/zones/fib extend over the
+      // newly loaded history — unless the page is frozen.
+      if (!frozenRef.current) {
+        if (rescanTimerRef.current) window.clearTimeout(rescanTimerRef.current)
+        rescanTimerRef.current = window.setTimeout(() => runRef.current(true), 1500)
+      }
     } catch { /* retried on next scroll */ } finally {
       loadingMoreRef.current = false
       setLoadingOlder(false)
@@ -521,8 +533,10 @@ export default function SmcAnalyzer() {
     // ── Markers: structure, swings, sweeps, inducements ──
     const markers: any[] = []
     if (layers.structure) {
-      for (const l of analysis.annotations?.labels ?? [])
-        markers.push({ time: toSec(l.time), position: 'aboveBar', color: '#d4af37', shape: 'circle', text: l.text })
+      // Full event list (annotations.labels only carries the last 6) — every
+      // BOS/CHoCH across the whole analyzed window gets its marker.
+      for (const e of analysis.structure)
+        markers.push({ time: toSec(e.time), position: 'aboveBar', color: '#d4af37', shape: 'circle', text: e.type })
     }
     if (layers.swings) {
       for (const s of analysis.swings) {

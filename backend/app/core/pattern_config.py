@@ -27,7 +27,7 @@ class PatternConfig:
     # followed them (see CANDLESTICK_CONFIRMATION_WINDOW_BARS), so an old
     # detection is still a truthful "this happened here and resolved
     # this way," not a stale live signal.
-    CANDLESTICK_LOOKBACK_BARS = 1000
+    CANDLESTICK_LOOKBACK_BARS = 2000
 
     # A pattern's signal candle must be a "real" candle relative to recent
     # volatility — tiny chop candles trivially satisfy shape ratios (a 2-tick
@@ -145,7 +145,7 @@ class PatternConfig:
     # Binance/backend's own per-call max) so "all historical + unfilled FVGs"
     # genuinely covers everything fetched, not just a trailing slice of it
     FVG_MIN_GAP_ATR_RATIO = 0.15
-    FVG_LOOKBACK_BARS = 1000
+    FVG_LOOKBACK_BARS = 2000
     FVG_STRONG_ATR_RATIO = 0.6
 
     # Smart Money Concepts — order blocks, BOS, CHOCH, liquidity. Also scaled

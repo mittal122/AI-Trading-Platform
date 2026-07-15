@@ -265,6 +265,37 @@ class BinanceProvider(BaseMarketProvider):
 
         return symbols
 
+    # Binance serves at most 1000 klines per request — anything above is
+    # silently truncated by the API, so bigger windows must be paged.
+    _KLINES_MAX_PER_REQUEST = 1000
+
+    def _fetch_klines_paged(
+        self, symbol: str, interval: str, limit: int, end_time: Optional[int]
+    ) -> list:
+        """Fetch up to `limit` klines, stitching backward pages when the ask
+        exceeds Binance's 1000-per-request ceiling. Pages walk back via
+        endTime = (oldest open_time − 1); stops early when history runs out."""
+        remaining = limit
+        cursor = end_time
+        pages: list[list] = []
+        while remaining > 0:
+            kwargs = {} if cursor is None else {"endTime": cursor}
+            batch = self.client.get_klines(
+                symbol=symbol.upper(),
+                interval=self.INTERVAL_MAP[interval],
+                limit=min(remaining, self._KLINES_MAX_PER_REQUEST),
+                **kwargs,
+            )
+            if not batch:
+                break
+            pages.append(batch)
+            remaining -= len(batch)
+            if len(batch) < min(remaining + len(batch), self._KLINES_MAX_PER_REQUEST):
+                break  # history exhausted
+            cursor = batch[0][0] - 1  # open_time of the oldest kline, minus 1ms
+        # Pages were collected newest-first; flatten oldest-first.
+        return [k for page in reversed(pages) for k in page]
+
     def get_market_data(
         self,
         symbol: str,
@@ -273,16 +304,7 @@ class BinanceProvider(BaseMarketProvider):
         end_time: Optional[int] = None,
     ) -> pd.DataFrame:
 
-        kwargs = {}
-        if end_time is not None:
-            kwargs["endTime"] = end_time
-
-        klines = self.client.get_klines(
-            symbol=symbol.upper(),
-            interval=self.INTERVAL_MAP[interval],
-            limit=limit,
-            **kwargs,
-        )
+        klines = self._fetch_klines_paged(symbol, interval, limit, end_time)
 
         df = pd.DataFrame(
             klines,

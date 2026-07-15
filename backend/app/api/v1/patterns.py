@@ -19,7 +19,7 @@ def list_available_detectors():
 def scan_patterns(
     symbol: str = Query(default="BTCUSDT"),
     interval: str = Query(default="1h"),
-    limit: int = Query(default=300, ge=50, le=1000),
+    limit: int = Query(default=300, ge=50, le=2000),
     include_ai: bool = Query(
         default=False,
         description="Auto-generate an AI explanation for every pattern found. Slow with "
@@ -55,7 +55,7 @@ def scan_patterns_multi_timeframe(
         default=None,
         description="Comma-separated intervals, e.g. '1m,5m,15m,1h,4h,1d,1w'. Defaults to the platform's standard scan set.",
     ),
-    limit: int = Query(default=300, ge=50, le=1000),
+    limit: int = Query(default=300, ge=50, le=2000),
     include_ai: bool = Query(default=False, description="See GET /patterns/scan — same tradeoff, multiplied across timeframes."),
 ):
     """One symbol, every timeframe analyzed independently — patterns and FVGs per timeframe."""
@@ -67,7 +67,7 @@ def scan_patterns_multi_timeframe(
 def pattern_dashboard(
     symbol: str = Query(default="BTCUSDT"),
     intervals: str = Query(default=None, description="Comma-separated intervals, defaults to the standard scan set."),
-    limit: int = Query(default=300, ge=50, le=1000),
+    limit: int = Query(default=300, ge=50, le=2000),
 ):
     """Flattened, confidence-sorted table of every active pattern across timeframes for one symbol."""
     interval_list = [i.strip() for i in intervals.split(",") if i.strip()] if intervals else None

@@ -11,7 +11,7 @@ Field names mirror SMC_System_Documentation.pdf so the port stays auditable.
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # Reuse the generic annotation primitives (identical rendering needs).
 from backend.app.schemas.pattern import ChartAnnotations  # noqa: F401
@@ -311,7 +311,7 @@ class AnalysisResult(BaseModel):
 class AnalysisRequest(BaseModel):
     symbol: str
     interval: str = "1h"
-    limit: int = 500
+    limit: int = Field(default=500, ge=60, le=2000)
 
 
 class AutoTestStartRequest(BaseModel):

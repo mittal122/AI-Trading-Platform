@@ -3,7 +3,7 @@ class AnalysisConfig:
     # Support & Resistance — scaled to the full per-request ceiling (1000)
     # so historical levels well back in the loaded dataset still surface,
     # not just a trailing 200-bar slice regardless of how much was fetched.
-    SR_LOOKBACK_BARS = 1000
+    SR_LOOKBACK_BARS = 2000
     SR_LEVEL_TOLERANCE_PCT = 0.5          # cluster tolerance for "same level"
     SR_MIN_TOUCHES = 2
     SR_PSYCHOLOGICAL_ROUND_DIGITS = 2      # round-number levels: nearest 10^N below price magnitude
@@ -18,7 +18,7 @@ class AnalysisConfig:
     # trailing window)
     VWAP_STDDEV_MULTIPLIER_1 = 1.0
     VWAP_STDDEV_MULTIPLIER_2 = 2.0
-    VWAP_LOOKBACK_BARS = 1000
+    VWAP_LOOKBACK_BARS = 2000
 
     # Pivot Points — based on the prior full daily period's H/L/C regardless
     # of the chart's own interval (the professional convention: daily pivots

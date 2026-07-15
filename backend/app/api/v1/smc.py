@@ -64,7 +64,7 @@ def smc_analyze(req: AnalysisRequest) -> AnalysisResult:
 @router.get("/analyze/{symbol}/{interval}", response_model=AnalysisResult)
 def smc_analyze_get(
     symbol: str, interval: str,
-    limit: int = Query(default=smc_config.DEFAULT_CANDLES, ge=smc_config.MIN_CANDLES, le=1500),
+    limit: int = Query(default=smc_config.DEFAULT_CANDLES, ge=smc_config.MIN_CANDLES, le=2000),
 ) -> AnalysisResult:
     """Path-parameter form of POST /smc/analyze."""
     return _run_analysis(symbol, interval, limit)

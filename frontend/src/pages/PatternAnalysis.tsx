@@ -37,7 +37,7 @@ const LOAD_MORE_THRESHOLD_BARS = 20
 // Every detector's own lookback config caps out here too (see pattern_config.py
 // / analysis_config.py) — matches Binance/backend's own per-request ceiling,
 // so this is the real, honest limit of "how much loaded history gets analyzed."
-const MAX_SCAN_LIMIT = 1000
+const MAX_SCAN_LIMIT = 2000
 // Analysis tools (no auto-AI) rescan as more history loads, but debounced —
 // don't fire a network call on every single scroll tick.
 const TOOL_RESCAN_DEBOUNCE_MS = 1200

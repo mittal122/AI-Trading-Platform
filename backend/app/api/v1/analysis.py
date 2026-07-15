@@ -20,7 +20,7 @@ def scan_analysis_tools(
     symbol: str = Query(default="BTCUSDT"),
     interval: str = Query(default="1h"),
     tools: str = Query(default=None, description="Comma-separated tool keys. Defaults to all registered tools."),
-    limit: int = Query(default=300, ge=50, le=1000),
+    limit: int = Query(default=300, ge=50, le=2000),
 ):
     """
     Every requested tool computed algorithmically — no AI, fast (sub-second),
