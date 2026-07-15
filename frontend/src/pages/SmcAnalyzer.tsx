@@ -79,6 +79,15 @@ export default function SmcAnalyzer() {
     emaPeriods: [], fibLevels: [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1], fibLookback: 200,
   })
 
+  // Page freeze: when on, the live candle poll and the quiet candle-close
+  // re-analysis are both skipped, so the chart and the signal cards stay one
+  // consistent snapshot (a live-ticking chart under a frozen BUY plan reads
+  // as a contradiction). The FreezeBar's live price/drift readout keeps
+  // polling on purpose — it's the warning that the frozen plan went stale.
+  const [frozen, setFrozen] = useState(false)
+  const frozenRef = useRef(false)
+  frozenRef.current = frozen
+
   // Drawn trend lines, persisted per symbol+interval (a map keyed by both).
   type TL = { p1: { time: number; price: number }; p2: { time: number; price: number } }
   const [allTrendlines, setAllTrendlines] = usePersistedState<Record<string, TL[]>>('smc.trendlines', {})
@@ -154,6 +163,20 @@ export default function SmcAnalyzer() {
 
   useEffect(() => { run() }, [run])
 
+  // Switching symbol/interval loads a fresh analysis anyway — carrying the
+  // frozen state over would freeze a chart the user just asked to change.
+  useEffect(() => { setFrozen(false) }, [symbol, interval])
+
+  const toggleFreeze = useCallback(() => {
+    setFrozen(f => {
+      // Unfreezing after several candle closes leaves a gap the live poll's
+      // single-bar update() can't fill — a full quiet re-run resets both the
+      // chart data and the analysis together, still one consistent snapshot.
+      if (f) void run(true)
+      return !f
+    })
+  }, [run])
+
   // Live updates: the analysis itself is frozen by design (see SmcFreezeBar),
   // but the chart's last candle must track the real market — and once a new
   // candle closes, the frozen analysis is re-run quietly so zones/structure/
@@ -221,6 +244,7 @@ export default function SmcAnalyzer() {
   const loadOlderRef = useRef(loadOlder); loadOlderRef.current = loadOlder
   useEffect(() => {
     const id = window.setInterval(async () => {
+      if (frozenRef.current) return
       const series = candleSeriesRef.current
       const sym = chartSymbolRef.current, itv = chartIntervalRef.current
       const last = lastCandleTimeRef.current
@@ -574,7 +598,10 @@ export default function SmcAnalyzer() {
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_400px] gap-3 items-start">
         <div className="space-y-3">
           <div ref={chartCardRef} className={`card p-3 ${isFull ? 'flex flex-col justify-center' : ''}`}>
-            {analysis && !isFull && <SmcFreezeBar analysis={analysis} onReanalyze={run} />}
+            {analysis && !isFull && (
+              <SmcFreezeBar analysis={analysis} onReanalyze={run}
+                frozen={frozen} onToggleFreeze={toggleFreeze} />
+            )}
             {analysis && (
               <div className="flex items-center flex-wrap gap-1.5 px-1 pb-2">
                 {analysis.htf?.available && (

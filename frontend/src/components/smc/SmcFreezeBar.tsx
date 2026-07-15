@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { RefreshCw, TriangleAlert } from 'lucide-react'
+import { Pause, Play, RefreshCw, TriangleAlert } from 'lucide-react'
 import { getLiveMarket } from '../../api/client'
 import type { SmcAnalysis } from '../../api/client'
 
@@ -7,8 +7,9 @@ import type { SmcAnalysis } from '../../api/client'
 // snapshot at cutoff_price; the live price streams separately and this bar
 // surfaces the DRIFT between them rather than silently mutating the plan. When
 // the live price crosses a plan level (entry/SL/TP), it flags a re-analysis.
-export default function SmcFreezeBar({ analysis, onReanalyze }: {
+export default function SmcFreezeBar({ analysis, onReanalyze, frozen, onToggleFreeze }: {
   analysis: SmcAnalysis; onReanalyze: () => void
+  frozen: boolean; onToggleFreeze: () => void
 }) {
   const [live, setLive] = useState<number>(analysis.cutoff_price)
   const crossedRef = useRef(false)
@@ -28,8 +29,8 @@ export default function SmcFreezeBar({ analysis, onReanalyze }: {
     return () => { alive = false; window.clearInterval(t) }
   }, [analysis.symbol, analysis.interval, analysis.cutoff_price])
 
-  const frozen = analysis.cutoff_price
-  const drift = frozen > 0 ? (live - frozen) / frozen * 100 : 0
+  const frozenPrice = analysis.cutoff_price
+  const drift = frozenPrice > 0 ? (live - frozenPrice) / frozenPrice * 100 : 0
   const plan = analysis.primary === 'long' ? analysis.long_plan
     : analysis.primary === 'short' ? analysis.short_plan : null
 
@@ -52,7 +53,7 @@ export default function SmcFreezeBar({ analysis, onReanalyze }: {
   return (
     <div className={`flex items-center flex-wrap gap-x-5 gap-y-1 px-3 py-1.5 rounded-md mb-2 text-[11.5px] border ${
       crossed ? 'bg-accent-soft border-accent/40' : 'bg-raised border-line'}`}>
-      <span className="text-fg-faint">Frozen <span className="num text-fg-soft font-medium">{frozen.toPrecision(6)}</span>
+      <span className="text-fg-faint">Frozen <span className="num text-fg-soft font-medium">{frozenPrice.toPrecision(6)}</span>
         <span className="num text-fg-faint"> · {age} ago</span></span>
       <span className="text-fg-faint">Live <span className="num text-fg font-medium">{live.toPrecision(6)}</span></span>
       <span className="text-fg-faint">Drift <span className={`num font-medium ${driftColor}`}>{drift >= 0 ? '+' : ''}{drift.toFixed(2)}%</span></span>
@@ -61,8 +62,20 @@ export default function SmcFreezeBar({ analysis, onReanalyze }: {
           <TriangleAlert size={12} aria-label="warning" /> Live price crossed the {crossed} — plan is stale
         </span>
       )}
+      {frozen && (
+        <span className="chip chip-warn !text-[10.5px]">PAGE FROZEN — chart paused</span>
+      )}
+      <button onClick={onToggleFreeze}
+        className={`btn !h-6 !px-2 !text-[11px] ml-auto ${frozen ? 'btn-primary' : ''}`}
+        title={frozen
+          ? 'Resume live chart updates (re-syncs chart + analysis together)'
+          : 'Pause the chart so it matches this frozen analysis exactly'}>
+        {frozen
+          ? <><Play size={11} aria-label="Resume" /> Go Live</>
+          : <><Pause size={11} aria-label="Freeze" /> Freeze</>}
+      </button>
       <button onClick={onReanalyze}
-        className={`btn !h-6 !px-2 !text-[11px] ml-auto ${crossed ? 'btn-primary' : ''}`}>
+        className={`btn !h-6 !px-2 !text-[11px] ${crossed ? 'btn-primary' : ''}`}>
         <RefreshCw size={11} aria-label="Re-analyze" /> Re-analyze
       </button>
     </div>
