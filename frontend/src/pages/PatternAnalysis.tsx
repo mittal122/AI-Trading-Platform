@@ -19,6 +19,7 @@ import type {
 import IndicatorSettings from '../components/IndicatorSettings'
 import type { IndicatorConfig } from '../components/IndicatorSettings'
 import { computeEma, fibLevels } from '../lib/indicators'
+import { parseUtcMs } from '../lib/time'
 import { drawSignalLines, clearSignalLines } from '../lib/signalLines'
 import PatternInfoPanel from '../components/PatternInfoPanel'
 import SignalsSection from '../components/SignalsSection'
@@ -81,7 +82,7 @@ const indicatorPill = (active: boolean) =>
       : 'bg-raised border-line text-fg-faint hover:text-fg-soft'}`
 
 function toBarTime(timestamp: string): UTCTimestamp {
-  return Math.floor(new Date(timestamp).getTime() / 1000) as UTCTimestamp
+  return Math.floor(parseUtcMs(timestamp) / 1000) as UTCTimestamp
 }
 
 function toBar(c: Candle) {
@@ -377,7 +378,7 @@ export default function PatternAnalysis() {
     const chart = createChart(chartRef.current, {
       layout: { background: { type: ColorType.Solid, color: '#11141b' }, textColor: '#5c6475', attributionLogo: false },
       grid: { vertLines: { color: '#1a1f2b' }, horzLines: { color: '#1a1f2b' } },
-      timeScale: { borderColor: '#232837' },
+      timeScale: { borderColor: '#232837', fixRightEdge: true },
       rightPriceScale: { borderColor: '#232837' },
       crosshair: {
         vertLine: { color: '#3d465c', labelBackgroundColor: '#303748' },
@@ -429,7 +430,7 @@ export default function PatternAnalysis() {
       const fetchedInterval = intervalRef.current
       try {
         const oldest = allCandlesRef.current[0]
-        const endTime = new Date(oldest.timestamp).getTime() - 1
+        const endTime = parseUtcMs(oldest.timestamp) - 1
         const older = await fetchCandlesCached(fetchedFor, fetchedInterval, PAGE_CANDLES, endTime)
 
         // Symbol/interval changed while this fetch was in flight — the candle
@@ -570,7 +571,7 @@ export default function PatternAnalysis() {
         const lastIdx = candles.length - 1
         if (candles[lastIdx].timestamp === live.timestamp) {
           candles[lastIdx] = live
-        } else if (new Date(live.timestamp) > new Date(candles[lastIdx].timestamp)) {
+        } else if (parseUtcMs(live.timestamp) > parseUtcMs(candles[lastIdx].timestamp)) {
           allCandlesRef.current = [...candles, live]
           setLoadedCount(allCandlesRef.current.length)
           // Only on a NEW candle appending — not every live tick.

@@ -14,6 +14,7 @@ import SymbolSearchInput from '../components/SymbolSearchInput'
 import IndicatorSettings from '../components/IndicatorSettings'
 import type { IndicatorConfig } from '../components/IndicatorSettings'
 import { bestPivotTrendline, fibLevels } from '../lib/indicators'
+import { parseUtcMs } from '../lib/time'
 import { drawLevels, clearSignalLines } from '../lib/signalLines'
 import { usePersistedState } from '../hooks/usePersistedState'
 import SmcVerdictCard from '../components/smc/SmcVerdictCard'
@@ -42,7 +43,7 @@ const DEFAULT_LAYERS: Record<LayerKey, boolean> = {
   volume: true, fib: false, autotrend: false,
 }
 
-const toSec = (iso: string) => Math.floor(Date.parse(iso) / 1000) as UTCTimestamp
+const toSec = (iso: string) => Math.floor(parseUtcMs(iso) / 1000) as UTCTimestamp
 
 // How often the chart's last (still-forming) candle is refreshed from Binance.
 const LIVE_POLL_MS = 5000
@@ -56,10 +57,11 @@ function zoneColors(label: string, bias?: string): [string, string] {
   return ['rgba(148,163,184,0.08)', 'rgba(148,163,184,0.4)']
 }
 
+// Plan levels only — EQH/EQL deliberately absent: the Liquidity layer already
+// draws every pool, and annotations.levels repeats them (double axis labels).
 const LEVEL_STYLE: Record<string, { color: string; dashed?: boolean }> = {
   Entry: { color: '#e2e8f0' }, Stop: { color: '#f6465d' },
   TP1: { color: '#2ebd85' }, TP2: { color: '#2ebd85' },
-  EQH: { color: '#5c6475', dashed: true }, EQL: { color: '#5c6475', dashed: true },
 }
 
 const HTF_CHIP: Record<string, string> = { up: 'chip-up', down: 'chip-down' }
@@ -279,7 +281,10 @@ export default function SmcAnalyzer() {
     const chart = createChart(chartRef.current, {
       layout: { background: { type: ColorType.Solid, color: '#11141b' }, textColor: '#5c6475', attributionLogo: false },
       grid: { vertLines: { color: '#1a1f2b' }, horzLines: { color: '#1a1f2b' } },
-      timeScale: { borderColor: '#232837' },
+      // fixRightEdge: zooming/scrolling can otherwise push the last candle
+      // deep into the pane and leave a huge blank "future" area — the last
+      // bar now stays glued to the right edge.
+      timeScale: { borderColor: '#232837', fixRightEdge: true },
       rightPriceScale: { borderColor: '#232837' },
       handleScale: {
         axisPressedMouseMove: { time: true, price: true },
@@ -430,11 +435,12 @@ export default function SmcAnalyzer() {
     priceLinesRef.current.forEach(l => series.removePriceLine(l))
     const lines: any[] = []
     if (layers.liquidity) {
-      // Two pools can sit at the same price — one line is enough.
-      const seenPools = new Set<number>()
+      // Two pools can sit at (visually) the same price — one line is enough.
+      const seenPools = new Set<string>()
       for (const p of analysis.liquidity_pools) {
-        if (seenPools.has(p.price)) continue
-        seenPools.add(p.price)
+        const key = `${p.direction}:${p.price.toFixed(2)}`
+        if (seenPools.has(key)) continue
+        seenPools.add(key)
         lines.push(series.createPriceLine({
           price: p.price, color: '#5c6475', lineWidth: 1, lineStyle: 2,
           axisLabelVisible: true, title: p.direction === 'BEARISH' ? 'EQH' : 'EQL',

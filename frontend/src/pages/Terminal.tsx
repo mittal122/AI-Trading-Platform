@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import { createChart, ColorType, CandlestickSeries } from 'lightweight-charts'
 import type { ISeriesApi, IPriceLine, LogicalRange, UTCTimestamp } from 'lightweight-charts'
 import { drawSignalLines, clearSignalLines } from '../lib/signalLines'
+import { parseUtcMs } from '../lib/time'
 import { Info, X, ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import {
   getMarket, getLiveMarket, getIndicators, getSignal,
@@ -33,7 +34,7 @@ const RADAR_POLL_MS = 60_000
 const DEFAULT_WATCHLIST = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT']
 
 function toBarTime(timestamp: string): UTCTimestamp {
-  return Math.floor(new Date(timestamp).getTime() / 1000) as UTCTimestamp
+  return Math.floor(parseUtcMs(timestamp) / 1000) as UTCTimestamp
 }
 
 function toBar(c: Candle) {
@@ -154,7 +155,7 @@ export default function Terminal() {
     const chart = createChart(chartRef.current, {
       layout: { background: { type: ColorType.Solid, color: '#11141b' }, textColor: '#5c6475', attributionLogo: false },
       grid: { vertLines: { color: '#1a1f2b' }, horzLines: { color: '#1a1f2b' } },
-      timeScale: { borderColor: '#232837' },
+      timeScale: { borderColor: '#232837', fixRightEdge: true },
       rightPriceScale: { borderColor: '#232837' },
       handleScale: { axisPressedMouseMove: { time: true, price: false } },
       crosshair: {
@@ -191,7 +192,7 @@ export default function Terminal() {
       setLoadingOlder(true)
       try {
         const oldest = allCandles[0]
-        const endTime = new Date(oldest.timestamp).getTime() - 1
+        const endTime = parseUtcMs(oldest.timestamp) - 1
         const res = await getMarket(symbol, interval, PAGE_CANDLES, endTime)
         const older = res.data.candles
         if (!Array.isArray(older) || older.length === 0) {
@@ -247,7 +248,7 @@ export default function Terminal() {
         const lastIdx = allCandles.length - 1
         if (allCandles[lastIdx].timestamp === live.timestamp) {
           allCandles[lastIdx] = live
-        } else if (new Date(live.timestamp) > new Date(allCandles[lastIdx].timestamp)) {
+        } else if (parseUtcMs(live.timestamp) > parseUtcMs(allCandles[lastIdx].timestamp)) {
           allCandles = [...allCandles, live]
         }
       } catch { /* next tick retries */ }
